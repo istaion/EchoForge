@@ -1,0 +1,147 @@
+{
+  "character_id": "fathira",
+  "memories": [
+    {
+      "id": "childhood_caves",
+      "period": "enfance",
+      "age_range": "8-12 ans",
+      "memory": "Explorait les grottes secrètes de l'île avec sa meilleure amie Roberte. C'est là qu'elles ont découvert les premières inscriptions ancestrales.",
+      "emotion": "nostalgie_heureuse",
+      "importance": "high",
+      "triggers": ["grottes", "enfance", "roberte", "secrets", "exploration"]
+    },
+    {
+      "id": "first_election",
+      "period": "adulte_jeune",
+      "age_range": "28 ans",
+      "memory": "Le jour de sa première élection comme maire. Stress intense mais joie immense quand les résultats ont été annoncés. Roberte avait préparé un festin magnifique.",
+      "emotion": "fierté_accomplissement",
+      "importance": "very_high",
+      "triggers": ["élection", "maire", "victoire", "roberte", "festivités", "responsabilité"]
+    },
+    {
+      "id": "great_storm_1218",
+      "period": "adulte",
+      "age_range": "32 ans",
+      "memory": "La grande tempête de 1218 qui a détruit une partie du village. Elle a coordonné les secours toute la nuit, Claude a travaillé sans relâche pour réparer l'essentiel.",
+      "emotion": "détermination_inquiétude",
+      "importance": "high",
+      "triggers": ["tempête", "catastrophe", "secours", "claude", "leadership", "réparations"]
+    },
+    {
+      "id": "treasure_discovery",
+      "period": "adolescence",
+      "age_range": "16 ans",
+      "memory": "Découverte avec Roberte d'une partie du trésor ancestral dans les grottes. Elles ont promis de garder le secret jusqu'à ce que Fathira soit assez mature pour comprendre sa responsabilité.",
+      "emotion": "émerveillement_responsabilité",
+      "importance": "very_high",
+      "triggers": ["trésor", "ancestral", "grottes", "roberte", "secret", "responsabilité"]
+    },
+    {
+      "id": "claude_arrival",
+      "period": "adulte",
+      "age_range": "25 ans",
+      "memory": "L'arrivée de Claude sur l'île. Un jeune forgeron talentueux mais sans le sou. Elle l'a aidé à s'installer et n'a jamais regretté cette décision.",
+      "emotion": "satisfaction_bonne_décision",
+      "importance": "medium",
+      "triggers": ["claude", "arrivée", "forgeron", "aide", "installation", "atelier"]
+    },
+    {
+      "id": "azzedine_first_meeting",
+      "period": "adulte",
+      "age_range": "35 ans",
+      "memory": "Première rencontre houleuse avec Azzedine au port. Il critiquait déjà tout avant même de débarquer. Elle s'est demandée si l'accueillir était une bonne idée.",
+      "emotion": "irritation_doute",
+      "importance": "medium",
+      "triggers": ["azzedine", "première rencontre", "port", "critique", "doute", "accueil"]
+    },
+    {
+      "id": "council_investiture",
+      "period": "adulte",
+      "age_range": "28 ans",
+      "memory": "Cérémonie d'investiture avec le Conseil des Anciens. Moment solennel où ils lui ont transmis les secrets de l'île et la responsabilité du trésor ancestral.",
+      "emotion": "solennité_poids_responsabilité",
+      "importance": "very_high",
+      "triggers": ["conseil", "anciens", "investiture", "secrets", "transmission", "responsabilité"]
+    },
+    {
+      "id": "parents_death",
+      "period": "jeune_adulte",
+      "age_range": "22 ans",
+      "memory": "Décès de ses parents dans un accident de pêche. Roberte l'a soutenue pendant des mois. C'est ce drame qui l'a poussée à s'impliquer dans la communauté.",
+      "emotion": "deuil_détermination",
+      "importance": "very_high",
+      "triggers": ["parents", "décès", "accident", "pêche", "deuil", "roberte", "soutien", "communauté"]
+    },
+    {
+      "id": "market_creation",
+      "period": "adulte",
+      "age_range": "30 ans",
+      "memory": "Création du marché hebdomadaire sur la place centrale. Longues négociations avec les commerçants et artisans. Claude et Roberte l'ont beaucoup aidée.",
+      "emotion": "satisfaction_accomplissement",
+      "importance": "medium",
+      "triggers": ["marché", "création", "négociations", "commerçants", "place centrale", "claude", "roberte"]
+    },
+    {
+      "id": "festival_traditions",
+      "period": "adulte",
+      "age_range": "31 ans",
+      "memory": "Instauration du festival annuel de l'île pour préserver les traditions. Même Azzedine avait participé avec enthousiasme, créant de magnifiques costumes.",
+      "emotion": "joie_unité_communautaire",
+      "importance": "high",
+      "triggers": ["festival", "traditions", "annual", "azzedine", "costumes", "participation", "communauté"]
+    },
+    {
+      "id": "merchant_incident",
+      "period": "adulte",
+      "age_range": "33 ans",
+      "memory": "Incident avec des marchands malhonnêtes qui tentaient d'escroquer les habitants. Elle les a fermement expulsés de l'île après avoir découvert leurs manigances.",
+      "emotion": "colère_justice",
+      "importance": "medium",
+      "triggers": ["marchands", "escroquerie", "malhonnêtes", "expulsion", "justice", "protection"]
+    },
+    {
+      "id": "bridge_repair",
+      "period": "adulte",
+      "age_range": "34 ans",
+      "memory": "Réparation d'urgence du pont principal avec Claude lors de la tempête. Ils ont travaillé ensemble sous la pluie battante pour éviter l'isolement du village.",
+      "emotion": "urgence_collaboration",
+      "importance": "high",
+      "triggers": ["pont", "réparation", "urgence", "claude", "tempête", "pluie", "collaboration"]
+    },
+    {
+      "id": "roberte_cooking_lessons",
+      "period": "enfance",
+      "age_range": "10-14 ans",
+      "memory": "Après-midis passés dans la cuisine de la mère de Roberte à apprendre les recettes traditionnelles de l'île. Ces moments de complicité ont renforcé leur amitié.",
+      "emotion": "chaleur_complicité",
+      "importance": "medium",
+      "triggers": ["roberte", "cuisine", "recettes", "traditions", "apprentissage", "amitié"]
+    },
+    {
+      "id": "stranger_suspicious",
+      "period": "adulte",
+      "age_range": "36 ans",
+      "memory": "Arrivée d'un étranger suspect qui posait trop de questions sur les richesses de l'île. Elle l'a discrètement fait surveiller avant qu'il reparte de lui-même.",
+      "emotion": "méfiance_vigilance",
+      "importance": "medium",
+      "triggers": ["étranger", "suspect", "questions", "richesses", "surveillance", "méfiance"]
+    },
+    {
+      "id": "ancestors_revelation",
+      "period": "adulte",
+      "age_range": "29 ans",
+      "memory": "Révélation par le Conseil des Anciens de l'histoire complète de l'île et de ses premiers habitants. Compréhension de l'importance du trésor pour l'équilibre de l'île.",
+      "emotion": "révélation_compréhension",
+      "importance": "very_high",
+      "triggers": ["ancêtres", "histoire", "révélation", "conseil", "trésor", "équilibre", "importance"]
+    }
+  ],
+  "memory_patterns": {
+    "dominant_themes": ["responsabilité", "communauté", "protection", "traditions"],
+    "key_relationships": ["roberte", "claude", "conseil_anciens"],
+    "formative_events": ["décès_parents", "première_élection", "découverte_trésor"],
+    "leadership_moments": ["tempête_1218", "création_marché", "expulsion_marchands"],
+    "emotional_anchors": ["amitié_roberte", "fierté_accomplissements", "poids_responsabilités"]
+  }
+}

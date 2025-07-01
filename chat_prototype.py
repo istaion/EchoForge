@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 import os
 from typing import List, Tuple, Dict
+from main import EchoForgeRAG
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -89,43 +90,14 @@ game_state = {
     "current_character": "fathira"
 }
 
-def initialize_groq_client():
-    """Initialise le client Groq"""
-    if GROQ_API_KEY == "your-groq-api-key-here":
-        raise ValueError("⚠️ Veuillez configurer votre clé API Groq dans les variables d'environnement (GROQ_API_KEY)")
-    
-    return Groq(api_key=GROQ_API_KEY)
-
-def create_character_prompt(character_data: Dict, conversation_history: List, game_state: Dict) -> str:
+def create_character_prompt(character_data: Dict, conversation_history: List, game_state: Dict, rag_system: EchoForgeRAG) -> str:
     """Crée le prompt système pour un personnage"""
     
-    prompt = f"""Tu es {character_data['name']}, {character_data['role']}.
-
-PERSONNALITÉ: {character_data['personality']}
-STYLE DE PAROLE: {character_data['speech_style']}
-HISTOIRE: {character_data['backstory']}
-
-{GAME_CONTEXT}
-
-ÉTAT ACTUEL DU JEU:
-- Humeur: {character_data['current_mood']}
-- Heure actuelle: {datetime.now().strftime('%H:%M')}
-- Or du joueur: {game_state['player_gold']}
-- Cookies du joueur: {game_state['player_cookies']}
-- Tissu du joueur: {game_state['player_fabric']}
-
-RÈGLES DE ROLEPLAY:
-1. Reste TOUJOURS dans ton rôle de {character_data['name']}
-2. Utilise ton style de parole unique
-3. Référence ton histoire personnelle et tes connaissances spéciales
-4. Réagis selon ta personnalité et ton humeur actuelle
-5. Garde en mémoire les interactions précédentes
-6. N'accepte les échanges que selon tes conditions spécifiques
-7. Sois cohérent avec les ressources du joueur
-
-CONNAISSANCES SPÉCIALES: {', '.join(character_data['special_knowledge'])}
-
-Réponds en français, reste dans le contexte du jeu, et limite tes réponses à 2-3 phrases maximum."""
+    rag_system.create_character_prompt(self, character_data: Dict,
+                              world_context: List[str],
+                              character_context: List[str],
+                              parsed_input: ActionParsed,
+                              conversation_history: str = "")
 
     return prompt
 
@@ -360,7 +332,12 @@ def main():
         print("   export GROQ_API_KEY='votre_cle_ici'")
         print("   ou créez un fichier .env avec GROQ_API_KEY=votre_cle_ici")
         return
-    
+    # Initialisation
+    rag_system = EchoForgeRAG()
+
+    # Construction des vector stores (à faire une fois)
+    rag_system.build_world_vectorstore()
+    rag_system.build_character_vectorstore("fathira")
     # Création et lancement de l'interface
     demo = create_interface()
     

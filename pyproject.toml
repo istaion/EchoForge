@@ -7,5 +7,6 @@ requires-python = ">=3.12"
 dependencies = [
     "gradio>=5.35.0",
     "groq>=0.29.0",
+    "langchain>=0.3.26",
     "python-dotenv>=1.1.1",
 ]
