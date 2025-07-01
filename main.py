@@ -5,10 +5,15 @@ import json
 import re
 from pathlib import Path
 
-# LangChain imports
-from langchain.embeddings import OllamaEmbeddings
-from langchain.vectorstores import FAISS
-from langchain.llms import Ollama
+# LangChain imports - versions mises à jour
+try:
+    from langchain_ollama import OllamaEmbeddings, OllamaLLM
+except ImportError:
+    # Fallback vers les anciennes versions si langchain-ollama n'est pas installé
+    from langchain.embeddings import OllamaEmbeddings
+    from langchain.llms import Ollama as OllamaLLM
+
+from langchain_community.vectorstores import FAISS
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document
 from langchain.prompts import PromptTemplate
@@ -47,7 +52,7 @@ class EchoForgeRAG:
         self.embeddings = OllamaEmbeddings(
             model="paraphrase-multilingual:278m-mpnet-base-v2-fp16"
         )
-        self.llm = Ollama(model=model_name, temperature=0.7)
+        self.llm = OllamaLLM(model=model_name, temperature=0.7)
         
         # Stores vectoriels
         self.world_vectorstore = None
@@ -71,7 +76,8 @@ class EchoForgeRAG:
         if world_store_path.exists():
             self.world_vectorstore = FAISS.load_local(
                 str(world_store_path), 
-                self.embeddings
+                self.embeddings,
+                allow_dangerous_deserialization=True
             )
         else:
             print("🌍 Vector store du monde non trouvé. Utilisez build_world_vectorstore()")
@@ -101,40 +107,50 @@ class EchoForgeRAG:
         
         if not world_data_path.exists():
             print(f"❌ Dossier {world_data_path} introuvable")
-            return
-        
-        documents = []
-        
-        # Charge tous les fichiers JSON du lore
-        for json_file in world_data_path.glob("*.json"):
-            with open(json_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                
-            # Convertit chaque entrée en document
-            if isinstance(data, list):
-                for item in data:
-                    doc_text = self._format_world_item(item, json_file.stem)
-                    documents.append(Document(
-                        page_content=doc_text,
-                        metadata={
-                            "source": json_file.stem,
-                            "type": "world_lore",
-                            "item_id": item.get("id", item.get("name", "unknown"))
-                        }
-                    ))
-            elif isinstance(data, dict):
-                doc_text = self._format_world_item(data, json_file.stem)
-                documents.append(Document(
-                    page_content=doc_text,
-                    metadata={
-                        "source": json_file.stem,
-                        "type": "world_lore"
-                    }
-                ))
-        
-        if not documents:
-            print("❌ Aucun document trouvé pour le lore du monde")
-            return
+            # Créer un document par défaut pour éviter l'erreur
+            documents = [Document(
+                page_content="Île mystérieuse avec des habitants accueillants.",
+                metadata={"source": "default", "type": "world_lore"}
+            )]
+        else:
+            documents = []
+            
+            # Charge tous les fichiers JSON du lore
+            for json_file in world_data_path.glob("*.json"):
+                try:
+                    with open(json_file, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                        
+                    # Convertit chaque entrée en document
+                    if isinstance(data, list):
+                        for item in data:
+                            doc_text = self._format_world_item(item, json_file.stem)
+                            documents.append(Document(
+                                page_content=doc_text,
+                                metadata={
+                                    "source": json_file.stem,
+                                    "type": "world_lore",
+                                    "item_id": item.get("id", item.get("name", "unknown"))
+                                }
+                            ))
+                    elif isinstance(data, dict):
+                        doc_text = self._format_world_item(data, json_file.stem)
+                        documents.append(Document(
+                            page_content=doc_text,
+                            metadata={
+                                "source": json_file.stem,
+                                "type": "world_lore"
+                            }
+                        ))
+                except Exception as e:
+                    print(f"⚠️ Erreur lors du chargement de {json_file}: {e}")
+            
+            if not documents:
+                print("❌ Aucun document trouvé pour le lore du monde, création d'un document par défaut")
+                documents = [Document(
+                    page_content="Île mystérieuse avec des habitants accueillants.",
+                    metadata={"source": "default", "type": "world_lore"}
+                )]
         
         # Chunking des documents
         chunks = self.text_splitter.split_documents(documents)
@@ -154,54 +170,106 @@ class EchoForgeRAG:
         
         if not char_data_path.exists():
             print(f"❌ Dossier personnage {char_data_path} introuvable")
-            return
-        
-        documents = []
-        
-        # Charge les données du personnage
-        for json_file in char_data_path.glob("*.json"):
-            with open(json_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+            # Créer des documents par défaut pour éviter l'erreur
+            documents = [
+                Document(
+                    page_content=f"Je suis {character_id}, un habitant de l'île.",
+                    metadata={
+                        "character_id": character_id,
+                        "type": "default",
+                        "source": "default"
+                    }
+                )
+            ]
+        else:
+            documents = []
             
-            # Traite selon le type de fichier
-            if json_file.stem == "memories":
-                for memory in data.get("memories", []):
-                    documents.append(Document(
-                        page_content=memory,
+            # Charge les données du personnage
+            for json_file in char_data_path.glob("*.json"):
+                try:
+                    with open(json_file, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                    
+                    # Traite selon le type de fichier
+                    if json_file.stem == "memories":
+                        memories = data.get("memories", []) if isinstance(data, dict) else data
+                        if isinstance(memories, list):
+                            for memory in memories:
+                                if isinstance(memory, str):
+                                    documents.append(Document(
+                                        page_content=memory,
+                                        metadata={
+                                            "character_id": character_id,
+                                            "type": "memory",
+                                            "source": "memories"
+                                        }
+                                    ))
+                                elif isinstance(memory, dict):
+                                    # Si la mémoire est un dictionnaire, convertir en texte
+                                    memory_text = self._format_world_item(memory, "memory")
+                                    documents.append(Document(
+                                        page_content=memory_text,
+                                        metadata={
+                                            "character_id": character_id,
+                                            "type": "memory",
+                                            "source": "memories"
+                                        }
+                                    ))
+                    
+                    elif json_file.stem == "relationships":
+                        relationships = data.get("relationships", {}) if isinstance(data, dict) else {}
+                        for person, relation in relationships.items():
+                            doc_text = f"Relation avec {person}: {relation}"
+                            documents.append(Document(
+                                page_content=doc_text,
+                                metadata={
+                                    "character_id": character_id,
+                                    "type": "relationship",
+                                    "person": person,
+                                    "source": "relationships"
+                                }
+                            ))
+                    
+                    elif json_file.stem == "secrets":
+                        secrets = data.get("secrets", []) if isinstance(data, dict) else data
+                        if isinstance(secrets, list):
+                            for secret in secrets:
+                                if isinstance(secret, str):
+                                    documents.append(Document(
+                                        page_content=secret,
+                                        metadata={
+                                            "character_id": character_id,
+                                            "type": "secret",
+                                            "source": "secrets"
+                                        }
+                                    ))
+                                elif isinstance(secret, dict):
+                                    # Si le secret est un dictionnaire, convertir en texte
+                                    secret_text = self._format_world_item(secret, "secret")
+                                    documents.append(Document(
+                                        page_content=secret_text,
+                                        metadata={
+                                            "character_id": character_id,
+                                            "type": "secret",
+                                            "source": "secrets"
+                                        }
+                                    ))
+                    
+                except Exception as e:
+                    print(f"⚠️ Erreur lors du chargement de {json_file}: {e}")
+            
+            if not documents:
+                print(f"❌ Aucun document trouvé pour {character_id}, création d'un document par défaut")
+                documents = [
+                    Document(
+                        page_content=f"Je suis {character_id}, un habitant de l'île.",
                         metadata={
                             "character_id": character_id,
-                            "type": "memory",
-                            "source": "memories"
+                            "type": "default",
+                            "source": "default"
                         }
-                    ))
-            
-            elif json_file.stem == "relationships":
-                for person, relation in data.get("relationships", {}).items():
-                    doc_text = f"Relation avec {person}: {relation}"
-                    documents.append(Document(
-                        page_content=doc_text,
-                        metadata={
-                            "character_id": character_id,
-                            "type": "relationship",
-                            "person": person,
-                            "source": "relationships"
-                        }
-                    ))
-            
-            elif json_file.stem == "secrets":
-                for secret in data.get("secrets", []):
-                    documents.append(Document(
-                        page_content=secret,
-                        metadata={
-                            "character_id": character_id,
-                            "type": "secret",
-                            "source": "secrets"
-                        }
-                    ))
-        
-        if not documents:
-            print(f"❌ Aucun document trouvé pour {character_id}")
-            return
+                    )
+                ]
         
         # Chunking (plus fin pour les données personnelles)
         char_splitter = RecursiveCharacterTextSplitter(
@@ -233,7 +301,11 @@ class EchoForgeRAG:
             print(f"❌ Vector store de {character_id} introuvable. Construisez-le d'abord.")
             return None
         
-        vectorstore = FAISS.load_local(str(char_store_path), self.embeddings)
+        vectorstore = FAISS.load_local(
+            str(char_store_path), 
+            self.embeddings,
+            allow_dangerous_deserialization=True
+        )
         self.character_vectorstores[character_id] = vectorstore
         return vectorstore
     
@@ -241,6 +313,9 @@ class EchoForgeRAG:
         """Formate un élément du lore en texte"""
         if isinstance(item, str):
             return item
+        
+        if not isinstance(item, dict):
+            return str(item)
         
         text_parts = [f"Catégorie: {category}"]
         
@@ -252,8 +327,10 @@ class EchoForgeRAG:
         
         # Ajoute d'autres champs pertinents
         for key, value in item.items():
-            if key not in ["name", "description", "id"] and isinstance(value, str):
+            if key not in ["name", "description", "id"] and isinstance(value, (str, int, float)):
                 text_parts.append(f"{key.title()}: {value}")
+            elif key not in ["name", "description", "id"] and isinstance(value, list):
+                text_parts.append(f"{key.title()}: {', '.join(map(str, value))}")
         
         return "\n".join(text_parts)
     
@@ -262,8 +339,12 @@ class EchoForgeRAG:
         if not self.world_vectorstore:
             return []
         
-        docs = self.world_vectorstore.similarity_search(query, k=top_k)
-        return [doc.page_content for doc in docs]
+        try:
+            docs = self.world_vectorstore.similarity_search(query, k=top_k)
+            return [doc.page_content for doc in docs]
+        except Exception as e:
+            print(f"⚠️ Erreur lors de la récupération du contexte monde: {e}")
+            return []
     
     def retrieve_character_context(self, query: str, character_id: str, top_k: int = 5) -> List[str]:
         """Récupère le contexte d'un personnage pour une requête"""
@@ -271,8 +352,12 @@ class EchoForgeRAG:
         if not vectorstore:
             return []
         
-        docs = vectorstore.similarity_search(query, k=top_k)
-        return [doc.page_content for doc in docs]
+        try:
+            docs = vectorstore.similarity_search(query, k=top_k)
+            return [doc.page_content for doc in docs]
+        except Exception as e:
+            print(f"⚠️ Erreur lors de la récupération du contexte de {character_id}: {e}")
+            return []
     
     def create_character_prompt(self, 
                               character_data: Dict,
