@@ -3,10 +3,21 @@ import json
 from datetime import datetime
 import os
 from typing import List, Tuple, Dict
-from main import EchoForgeRAG, ActionParsed
 from pathlib import Path
+import base64
+from io import BytesIO
+from PIL import Image, ImageDraw
+import math
 
-# Données des personnages
+# Import du système RAG
+try:
+    from main import EchoForgeRAG, ActionParsed
+except ImportError:
+    print("⚠️ Erreur: Impossible d'importer EchoForgeRAG depuis main.py")
+    EchoForgeRAG = None
+    ActionParsed = None
+
+# Données des personnages avec leurs positions sur la carte
 CHARACTERS = {
     "fathira": {
         "name": "Fathira",
@@ -17,7 +28,9 @@ CHARACTERS = {
         "current_mood": "neutre",
         "can_give_gold": True,
         "special_knowledge": ["Histoire de l'île", "Localisation du trésor", "Relations entre habitants"],
-        "emoji": "👑"
+        "emoji": "👑",
+        "building": "Mairie (grande maison en haut)",
+        "position": {"x": 598, "y": 190}
     },
     "claude": {
         "name": "Claude",
@@ -29,7 +42,9 @@ CHARACTERS = {
         "wants_cookies": True,
         "can_repair": True,
         "special_knowledge": ["Métallurgie", "Réparation d'objets complexes", "Histoire des outils de l'île"],
-        "emoji": "🔨"
+        "emoji": "🔨",
+        "building": "Forge (maison à gauche)",
+        "position": {"x": 300, "y": 400}
     },
     "azzedine": {
         "name": "Azzedine", 
@@ -40,7 +55,9 @@ CHARACTERS = {
         "current_mood": "neutre",
         "sells_fabric": True,
         "special_knowledge": ["Tissus et matériaux", "Tendances artistiques", "Secrets de confection"],
-        "emoji": "✂️"
+        "emoji": "✂️",
+        "building": "Atelier de couture (maison colorée à droite)",
+        "position": {"x": 820, "y": 580}
     },
     "roberte": {
         "name": "Roberte",
@@ -52,27 +69,14 @@ CHARACTERS = {
         "gives_cookies": True,
         "cooking_schedule": "Cuisine le matin (8h-12h), pause l'après-midi (14h-16h)",
         "special_knowledge": ["Recettes ancestrales", "Ingrédients de l'île", "Habitudes alimentaires des habitants"],
-        "emoji": "👩‍🍳"
+        "emoji": "👩‍🍳",
+        "building": "Auberge (maison avec terrasse au centre)",
+        "position": {"x": 590, "y": 480}
     }
 }
 
-# Contexte général du jeu
-GAME_CONTEXT = """
-CONTEXTE: Tu es sur une île mystérieuse après que ta montgolfière ait été prise dans une tempête. 
-Ta montgolfière est endommagée et tu as besoin de la réparer pour repartir.
-
-RESSOURCES NÉCESSAIRES:
-- Tissu pour réparer l'enveloppe de la montgolfière
-- Réparation mécanique pour le panier et les systèmes
-
-HABITANTS DE L'ÎLE:
-- Fathira (Maire): Peut donner de l'or, connaît tous les secrets de l'île
-- Claude (Forgeron): Peut réparer ta montgolfière mais veut des cookies en échange
-- Azzedine (Styliste): Vend du tissu de qualité pour de l'or
-- Roberte (Cuisinière): Donne des cookies pendant ses pauses (14h-16h), n'aime pas être dérangée pendant qu'elle cuisine
-
-OBJECTIF: Obtenir les ressources nécessaires en interagissant intelligemment avec les habitants.
-"""
+# Position de la montgolfière
+BALLOON_POSITION = {"x": 120, "y": 120}
 
 # État global du jeu
 game_state = {
@@ -81,7 +85,9 @@ game_state = {
     "player_fabric": 0,
     "montgolfiere_repaired": False,
     "conversation_history": {},
-    "current_character": "fathira"
+    "current_character": None,
+    "player_position": BALLOON_POSITION.copy(),
+    "chat_open": False
 }
 
 # Instance globale du système RAG
@@ -91,6 +97,10 @@ def initialize_rag_system():
     """Initialise le système RAG"""
     global rag_system
     
+    if not EchoForgeRAG:
+        print("❌ EchoForgeRAG non disponible")
+        return False
+    
     try:
         print("🚀 Initialisation du système RAG...")
         rag_system = EchoForgeRAG(
@@ -99,7 +109,6 @@ def initialize_rag_system():
             model_name="llama3.1:8b"
         )
         
-        # Vérifie si les vector stores existent, sinon les crée
         print("📚 Vérification des vector stores...")
         
         # Vector store du monde
@@ -121,6 +130,75 @@ def initialize_rag_system():
     except Exception as e:
         print(f"❌ Erreur lors de l'initialisation du RAG: {str(e)}")
         return False
+
+def create_character_avatar(emoji: str, size: int = 60, active: bool = False) -> Image.Image:
+    """Crée un avatar circulaire pour un personnage"""
+    img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    
+    # Couleur du fond selon l'état
+    if active:
+        bg_color = (100, 200, 100, 220)  # Vert actif
+        border_color = (50, 150, 50, 255)
+    else:
+        bg_color = (255, 255, 255, 200)  # Blanc normal
+        border_color = (100, 100, 100, 255)
+    
+    # Fond coloré circulaire
+    margin = 5
+    draw.ellipse([margin, margin, size-margin, size-margin], 
+                fill=bg_color, outline=border_color, width=3)
+    
+    # Emoji au centre
+    font_size = size // 2
+    try:
+        # Calculer la position pour centrer l'emoji
+        text_bbox = draw.textbbox((0, 0), emoji)
+        text_width = text_bbox[2] - text_bbox[0]
+        text_height = text_bbox[3] - text_bbox[1]
+        
+        x = (size - text_width) // 2
+        y = (size - text_height) // 2
+        
+        draw.text((x, y), emoji, fill=(0, 0, 0, 255))
+    except:
+        # Fallback
+        draw.text((size//4, size//4), "?", fill=(0, 0, 0, 255))
+    
+    return img
+
+def load_map_image(map_path: str = "data/img/board.png") -> Image.Image:
+    """Charge l'image de la carte ou crée une carte placeholder"""
+    
+    try:
+        print(f"chemin de l'image : {Path(map_path)}")
+        return Image.open(map_path)
+        
+    except Exception as e:
+        return f"❌ Erreur lors de la récupération de l'image du board: {str(e)}"
+        
+
+def generate_interactive_map(active_character: str = None) -> Image.Image:
+    """Génère la carte avec les personnages positionnés"""
+    
+    # Charger l'image de base
+    map_img = load_map_image("data/img/board.png")  
+    
+    # Ajouter les avatars des personnages
+    for char_id, char_data in CHARACTERS.items():
+        pos = char_data["position"]
+        is_active = (char_id == active_character)
+        avatar = create_character_avatar(char_data["emoji"], 50, is_active)
+        
+        # Superposer l'avatar sur la carte
+        map_img.paste(avatar, (pos["x"]-25, pos["y"]-25), avatar)
+    
+    # Ajouter l'avatar du joueur
+    player_avatar = create_character_avatar("🧑", 40)
+    player_pos = game_state["player_position"]
+    map_img.paste(player_avatar, (player_pos["x"]-20, player_pos["y"]-20), player_avatar)
+    
+    return map_img
 
 def get_conversation_history_string(character_key: str, max_messages: int = 6) -> str:
     """Récupère l'historique de conversation formaté pour un personnage"""
@@ -187,7 +265,7 @@ def get_character_response(character_key: str, user_message: str) -> str:
     except Exception as e:
         return f"❌ Erreur lors de la génération de réponse: {str(e)}"
 
-def process_character_actions(character_key: str, character_response: str, user_input: ActionParsed):
+def process_character_actions(character_key: str, character_response: str, user_input):
     """Traite les actions spéciales du personnage et met à jour l'état du jeu"""
     
     character_data = CHARACTERS[character_key]
@@ -196,13 +274,13 @@ def process_character_actions(character_key: str, character_response: str, user_
     # Détection des actions basées sur le contenu de la réponse
     if character_key == "fathira" and character_data.get("can_give_gold"):
         if any(word in response_lower for word in ["donne", "offre", "voici", "prends"]) and "or" in response_lower:
-            if game_state["player_gold"] < 100:  # Limite pour éviter l'abus
+            if game_state["player_gold"] < 100:
                 game_state["player_gold"] += 10
                 print(f"💰 Fathira vous a donné 10 pièces d'or!")
     
     elif character_key == "roberte" and character_data.get("gives_cookies"):
         if any(word in response_lower for word in ["donne", "offre", "voici", "prends"]) and "cookie" in response_lower:
-            if game_state["player_cookies"] < 20:  # Limite
+            if game_state["player_cookies"] < 20:
                 game_state["player_cookies"] += 3
                 print(f"🍪 Roberte vous a donné 3 cookies!")
     
@@ -221,10 +299,43 @@ def process_character_actions(character_key: str, character_response: str, user_
                 game_state["montgolfiere_repaired"] = True
                 print(f"🎈 Claude a réparé votre montgolfière! Vous pouvez repartir!")
 
-def chat_interface(message: str, history: List[Tuple[str, str]], character_dropdown: str) -> Tuple[List[Tuple[str, str]], str]:
-    """Interface de chat principal"""
+def handle_map_click(evt: gr.SelectData) -> Tuple[str, bool, str, Image.Image]:
+    """Gère les clics sur la carte"""
+    if not evt.index:
+        return "Cliquez sur un personnage pour lui parler!", False, "", generate_interactive_map()
     
-    if not message.strip():
+    click_x, click_y = evt.index
+    
+    # Vérifier si le clic est proche d'un personnage
+    clicked_character = None
+    min_distance = float('inf')
+    
+    for char_id, char_data in CHARACTERS.items():
+        pos = char_data["position"]
+        distance = math.sqrt((click_x - pos["x"])**2 + (click_y - pos["y"])**2)
+        
+        if distance < 40 and distance < min_distance:
+            min_distance = distance
+            clicked_character = char_id
+    
+    if clicked_character:
+        game_state["current_character"] = clicked_character
+        game_state["chat_open"] = True
+        
+        char_data = CHARACTERS[clicked_character]
+        welcome_message = f"Vous approchez de {char_data['emoji']} {char_data['name']} ({char_data['role']})"
+        
+        # Générer la carte avec le personnage actif mis en évidence
+        updated_map = generate_interactive_map(clicked_character)
+        
+        return welcome_message, True, clicked_character, updated_map
+    else:
+        return "Cliquez sur un personnage pour lui parler!", False, "", generate_interactive_map()
+
+def chat_interface(message: str, history: List[Tuple[str, str]], character_id: str) -> Tuple[List[Tuple[str, str]], str]:
+    """Interface de chat avec un personnage"""
+    
+    if not message.strip() or not character_id:
         return history, ""
     
     if not rag_system:
@@ -232,16 +343,19 @@ def chat_interface(message: str, history: List[Tuple[str, str]], character_dropd
         history.append((message, error_msg))
         return history, ""
     
-    # Met à jour le personnage actuel
-    game_state["current_character"] = character_dropdown
-    
     # Obtient la réponse du personnage
-    character_response = get_character_response(character_dropdown, message)
+    character_response = get_character_response(character_id, message)
     
     # Met à jour l'historique d'affichage
     history.append((message, character_response))
     
     return history, ""
+
+def close_chat() -> Tuple[bool, List, str, Image.Image]:
+    """Ferme la fenêtre de chat"""
+    game_state["chat_open"] = False
+    game_state["current_character"] = None
+    return False, [], "", generate_interactive_map()
 
 def get_game_status() -> str:
     """Retourne l'état actuel du jeu"""
@@ -262,7 +376,7 @@ def get_game_status() -> str:
 """
     return status
 
-def reset_game() -> Tuple[List, str]:
+def reset_game() -> Tuple[List, str, Image.Image]:
     """Remet à zéro le jeu"""
     global game_state
     game_state = {
@@ -271,65 +385,80 @@ def reset_game() -> Tuple[List, str]:
         "player_fabric": 0,
         "montgolfiere_repaired": False,
         "conversation_history": {},
-        "current_character": "fathira"
+        "current_character": None,
+        "player_position": BALLOON_POSITION.copy(),
+        "chat_open": False
     }
-    return [], get_game_status()
+    return [], get_game_status(), generate_interactive_map()
 
 def create_interface():
-    """Crée l'interface Gradio"""
+    """Crée l'interface Gradio avec carte interactive"""
     
-    # Thème personnalisé
     theme = gr.themes.Soft(
         primary_hue="blue",
         secondary_hue="emerald",
         neutral_hue="slate",
     )
     
-    with gr.Blocks(theme=theme, title="🎈 EchoForge RAG") as demo:
+    with gr.Blocks(theme=theme, title="🎈 EchoForge RAG Interactive") as demo:
+        
+        # Variables d'état pour l'interface
+        chat_visible = gr.State(False)
+        current_char = gr.State("")
         
         # En-tête
         gr.HTML("""
         <div style="text-align: center; padding: 20px;">
-            <h1>🎈 EchoForge RAG</h1>
-            <h3>L'Île des Personnages Intelligents</h3>
-            <p><em>Donnez une âme à vos personnages avec RAG</em></p>
+            <h1>🎈 EchoForge RAG - Île Interactive</h1>
+            <h3>Cliquez sur les personnages pour leur parler</h3>
+            <p><em>Donnez une âme à vos personnages avec l'IA</em></p>
         </div>
         """)
         
         with gr.Row():
-            # Colonne principale - Chat
+            # Colonne principale - Carte et Chat
             with gr.Column(scale=2):
                 
-                # Sélection du personnage
-                character_choices = [(f"{data['emoji']} {data['name']} - {data['role']}", key) 
-                                   for key, data in CHARACTERS.items()]
-                
-                character_dropdown = gr.Dropdown(
-                    choices=character_choices,
-                    value="fathira",
-                    label="💬 Parler avec:",
-                    interactive=True
+                # Message d'instruction
+                instruction_msg = gr.Markdown(
+                    "🗺️ **Cliquez sur un personnage sur la carte pour commencer une conversation !**",
+                    visible=True
                 )
                 
-                # Interface de chat
-                chatbot = gr.Chatbot(
-                    label="Conversation",
-                    height=400,
+                # Carte interactive
+                map_image = gr.Image(
+                    value=generate_interactive_map(),
+                    interactive=True,
+                    label="Carte de l'île - Cliquez sur les personnages",
                     show_label=True,
-                    container=True,
-                    bubble_full_width=False
+                    height=480
                 )
                 
-                msg = gr.Textbox(
-                    label="Votre message",
-                    placeholder="Tapez votre message ici... (utilisez *action* pour les actions physiques)",
-                    lines=2,
-                    max_lines=4
-                )
-                
-                with gr.Row():
-                    send_btn = gr.Button("📤 Envoyer", variant="primary")
-                    clear_btn = gr.Button("🗑️ Effacer Chat", variant="secondary")
+                # Interface de chat (initialement masquée)
+                with gr.Column(visible=False) as chat_container:
+                    
+                    character_title = gr.Markdown("## Conversation", visible=False)
+                    
+                    chatbot = gr.Chatbot(
+                        label="Conversation",
+                        height=300,
+                        show_label=True,
+                        container=True,
+                        bubble_full_width=False
+                    )
+                    
+                    with gr.Row():
+                        msg = gr.Textbox(
+                            label="Votre message",
+                            placeholder="Tapez votre message ici... (utilisez *action* pour les actions physiques)",
+                            lines=2,
+                            scale=4
+                        )
+                        send_btn = gr.Button("📤 Envoyer", scale=1, variant="primary")
+                    
+                    with gr.Row():
+                        close_chat_btn = gr.Button("🚪 Retour à la carte", variant="secondary")
+                        clear_chat_btn = gr.Button("🗑️ Effacer chat", variant="secondary")
             
             # Colonne latérale - État du jeu et infos
             with gr.Column(scale=1):
@@ -339,17 +468,24 @@ def create_interface():
                 
                 gr.Markdown("---")
                 
-                # Informations sur le personnage sélectionné
-                character_info = gr.Markdown(
-                    f"""## 👑 Fathira
-                    **Rôle:** Maire de l'île
-                    
-                    **Personnalité:** {CHARACTERS['fathira']['personality']}
-                    
-                    **Peut aider avec:** Donner de l'or, informations sur l'île
-                    """,
-                    label="Personnage actuel"
-                )
+                # Guide des personnages
+                gr.Markdown("""
+                ## 👥 Personnages de l'île
+                
+                **👑 Fathira** - Maire  
+                *Donne de l'or, connaît les secrets*
+                
+                **🔨 Claude** - Forgeron  
+                *Répare la montgolfière contre des cookies*
+                
+                **✂️ Azzedine** - Styliste  
+                *Vend du tissu contre de l'or*
+                
+                **👩‍🍳 Roberte** - Cuisinière  
+                *Donne des cookies pendant ses pauses*
+                
+                💡 **Astuce:** Chaque personnage a sa personnalité et ses motivations propres !
+                """)
                 
                 gr.Markdown("---")
                 
@@ -357,62 +493,102 @@ def create_interface():
                 with gr.Column():
                     refresh_btn = gr.Button("🔄 Actualiser État", variant="secondary")
                     reset_btn = gr.Button("🆕 Nouveau Jeu", variant="stop")
-                    init_btn = gr.Button("🚀 Réinitialiser RAG", variant="secondary")
+                    init_rag_btn = gr.Button("🤖 Réinitialiser RAG", variant="secondary")
         
-        # Logique des événements
-        def update_character_info(character_key):
-            """Met à jour les infos du personnage sélectionné"""
-            char_data = CHARACTERS[character_key]
-            
-            # Détermine ce que le personnage peut faire
-            abilities = []
-            if char_data.get("can_give_gold"):
-                abilities.append("Donner de l'or")
-            if char_data.get("can_repair"):
-                abilities.append("Réparer la montgolfière")
-            if char_data.get("sells_fabric"):
-                abilities.append("Vendre du tissu")
-            if char_data.get("gives_cookies"):
-                abilities.append("Donner des cookies")
-            
-            abilities_text = ", ".join(abilities) if abilities else "Conversation générale"
-            
-            info_text = f"""## {char_data['emoji']} {char_data['name']}
-**Rôle:** {char_data['role']}
-
-**Personnalité:** {char_data['personality']}
-
-**Peut aider avec:** {abilities_text}
-
-**Style:** {char_data['speech_style']}
-"""
-            return info_text
+        # Fonctions de gestion des événements
+        def update_chat_visibility(visible: bool, char_id: str):
+            """Met à jour la visibilité du chat"""
+            if visible and char_id:
+                char_data = CHARACTERS[char_id]
+                title = f"## 💬 Conversation avec {char_data['emoji']} {char_data['name']}"
+                return {
+                    chat_container: gr.update(visible=True),
+                    character_title: gr.update(value=title, visible=True),
+                    instruction_msg: gr.update(visible=False)
+                }
+            else:
+                return {
+                    chat_container: gr.update(visible=False),
+                    character_title: gr.update(visible=False),
+                    instruction_msg: gr.update(visible=True)
+                }
         
         def reinitialize_rag():
             """Réinitialise le système RAG"""
             success = initialize_rag_system()
-            if success:
-                return get_game_status()
-            else:
-                return "❌ Échec de la réinitialisation du RAG"
+            return get_game_status()
         
         # Connexions des événements
-        msg.submit(chat_interface, [msg, chatbot, character_dropdown], [chatbot, msg])
-        send_btn.click(chat_interface, [msg, chatbot, character_dropdown], [chatbot, msg])
-        clear_btn.click(lambda: [], None, chatbot)
-        refresh_btn.click(get_game_status, None, game_status)
-        reset_btn.click(reset_game, None, [chatbot, game_status])
-        character_dropdown.change(update_character_info, character_dropdown, character_info)
-        init_btn.click(reinitialize_rag, None, game_status)
+        map_image.select(
+            handle_map_click,
+            outputs=[instruction_msg, chat_visible, current_char, map_image]
+        ).then(
+            update_chat_visibility,
+            inputs=[chat_visible, current_char],
+            outputs=[chat_container, character_title, instruction_msg]
+        )
         
-        # Instructions en bas
+        msg.submit(
+            chat_interface,
+            inputs=[msg, chatbot, current_char],
+            outputs=[chatbot, msg]
+        ).then(
+            lambda: get_game_status(),
+            outputs=[game_status]
+        )
+        
+        send_btn.click(
+            chat_interface,
+            inputs=[msg, chatbot, current_char],
+            outputs=[chatbot, msg]
+        ).then(
+            lambda: get_game_status(),
+            outputs=[game_status]
+        )
+        
+        close_chat_btn.click(
+            close_chat,
+            outputs=[chat_visible, chatbot, current_char, map_image]
+        ).then(
+            update_chat_visibility,
+            inputs=[chat_visible, current_char],
+            outputs=[chat_container, character_title, instruction_msg]
+        )
+        
+        clear_chat_btn.click(lambda: [], outputs=[chatbot])
+        
+        refresh_btn.click(
+            lambda: get_game_status(),
+            outputs=[game_status]
+        )
+        
+        reset_btn.click(
+            reset_game,
+            outputs=[chatbot, game_status, map_image]
+        ).then(
+            lambda: (False, "", []),
+            outputs=[chat_visible, current_char, chatbot]
+        ).then(
+            update_chat_visibility,
+            inputs=[chat_visible, current_char],
+            outputs=[chat_container, character_title, instruction_msg]
+        )
+        
+        init_rag_btn.click(
+            reinitialize_rag,
+            outputs=[game_status]
+        )
+        
+        # Instructions
         gr.HTML("""
         <div style="text-align: center; padding: 20px; margin-top: 20px; background-color: #f0f0f0; border-radius: 10px;">
-            <h4>🎯 Instructions</h4>
-            <p>Vous êtes échoué sur une île après un crash de montgolfière. Interagissez avec les habitants pour obtenir les ressources nécessaires à votre réparation !</p>
-            <p><strong>Astuce:</strong> Chaque personnage a ses propres motivations et conditions d'échange.</p>
-            <p><strong>Actions:</strong> Utilisez *votre action* pour décrire des actions physiques.</p>
-            <p><strong>RAG:</strong> Le système utilise la mémoire et le contexte des personnages pour des réponses plus intelligentes.</p>
+            <h4>🎯 Comment jouer</h4>
+            <p><strong>1.</strong> Cliquez sur les avatars des personnages (emojis) sur la carte</p>
+            <p><strong>2.</strong> Dialoguez intelligemment avec eux grâce au système RAG</p>
+            <p><strong>3.</strong> Négociez pour obtenir les ressources nécessaires</p>
+            <p><strong>4.</strong> Réparez votre montgolfière pour quitter l'île !</p>
+            <hr>
+            <p><em>💡 Le système RAG utilise la mémoire et la personnalité de chaque personnage pour des conversations plus riches !</em></p>
         </div>
         """)
     
@@ -421,7 +597,7 @@ def create_interface():
 def main():
     """Lance l'application"""
     
-    print("🎈 Démarrage d'EchoForge RAG...")
+    print("🎈 Démarrage d'EchoForge RAG Interactive...")
     
     # Initialisation du système RAG
     if not initialize_rag_system():
@@ -430,6 +606,7 @@ def main():
         print("  - Ollama est installé et en cours d'exécution")
         print("  - Les modèles llama3.1:8b et paraphrase-multilingual:278m-mpnet-base-v2-fp16 sont disponibles")
         print("  - Le dossier ./data contient les données des personnages")
+        print("  - Le fichier main.py avec EchoForgeRAG est présent")
         return
     
     # Création et lancement de l'interface
