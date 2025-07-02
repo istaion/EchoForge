@@ -42,7 +42,7 @@ class EchoForgeRAG:
     def __init__(self, 
                  data_path: str = "./data",
                  vector_store_path: str = "./vector_stores",
-                 model_name: str = "llama3.1:8b"):
+                 model_name: str = "llama3.2:latest"):
         
         self.data_path = Path(data_path)
         self.vector_store_path = Path(vector_store_path)
@@ -450,4 +450,8 @@ def example_usage():
     print(f"\n📝 Prompt généré:\n{prompt}")
 
 if __name__ == "__main__":
-    example_usage()
+    rag_system = EchoForgeRAG()
+    
+    # Construction des vector stores (à faire une fois)
+    rag_system.build_world_vectorstore()
+    rag_system.build_character_vectorstore("fathira")

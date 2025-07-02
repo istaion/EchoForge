@@ -1,0 +1,56 @@
+{
+  "character_id": "roberte",
+  "memories": [
+    {
+      "id": "cooking_with_mother",
+      "period": "enfance",
+      "age_range": "8-12 ans",
+      "memory": "Apprenait à cuisiner avec sa mère dans une cuisine en pierre volcanique. C’est là qu’elle a découvert sa passion.",
+      "emotion": "tendresse_nostalgie",
+      "importance": "high",
+      "triggers": ["cuisine", "mère", "recettes", "tradition", "volcanique"]
+    },
+    {
+      "id": "exploring_with_fathira",
+      "period": "enfance",
+      "age_range": "10 ans",
+      "memory": "Explorait les grottes avec Fathira. Elles ont trouvé des inscriptions anciennes et juré de garder le secret.",
+      "emotion": "complicité_mystère",
+      "importance": "very_high",
+      "triggers": ["grottes", "fathira", "secret", "exploration", "trésor"]
+    },
+    {
+      "id": "election_feast",
+      "period": "adulte",
+      "age_range": "28 ans",
+      "memory": "Organisa le banquet pour la victoire de Fathira aux élections. L’un des moments les plus joyeux de sa vie.",
+      "emotion": "fierté_joie",
+      "importance": "high",
+      "triggers": ["fête", "fathira", "banquet", "victoire", "cuisine"]
+    },
+    {
+      "id": "cookies_festival",
+      "period": "adulte",
+      "age_range": "33 ans",
+      "memory": "Créa sa célèbre recette de cookies à la fleur de sel pour le festival. Devint une légende locale.",
+      "emotion": "joie_reconnaissance",
+      "importance": "medium",
+      "triggers": ["cookies", "recette", "festival", "sucré", "fleur_de_sel"]
+    },
+    {
+      "id": "storm_rescue",
+      "period": "adulte",
+      "age_range": "34 ans",
+      "memory": "Prépara des repas chauds pour les sauveteurs pendant la grande tempête. Sa cuisine a redonné du courage à tous.",
+      "emotion": "soutien_courage",
+      "importance": "high",
+      "triggers": ["tempête", "soutien", "sauvetage", "repas", "communauté"]
+    }
+  ],
+  "memory_patterns": {
+    "dominant_themes": ["nourrir", "protéger", "histoire locale"],
+    "key_relationships": ["fathira", "habitants", "traditions"],
+    "formative_events": ["exploration_grottes", "victoire_fathira"],
+    "emotional_anchors": ["cuisine_famille", "complicité_fathira", "partage_communautaire"]
+  }
+}
