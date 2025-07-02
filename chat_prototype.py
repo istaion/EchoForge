@@ -1,15 +1,10 @@
 import gradio as gr
-from groq import Groq
 import json
 from datetime import datetime
 import os
 from typing import List, Tuple, Dict
-from dotenv import load_dotenv
-
-load_dotenv()
-
-# Configuration
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "your-groq-api-key-here")
+from main import EchoForgeRAG, ActionParsed
+from pathlib import Path
 
 # Données des personnages
 CHARACTERS = {
@@ -89,94 +84,152 @@ game_state = {
     "current_character": "fathira"
 }
 
-def initialize_groq_client():
-    """Initialise le client Groq"""
-    if GROQ_API_KEY == "your-groq-api-key-here":
-        raise ValueError("⚠️ Veuillez configurer votre clé API Groq dans les variables d'environnement (GROQ_API_KEY)")
-    
-    return Groq(api_key=GROQ_API_KEY)
+# Instance globale du système RAG
+rag_system = None
 
-def create_character_prompt(character_data: Dict, conversation_history: List, game_state: Dict) -> str:
-    """Crée le prompt système pour un personnage"""
-    
-    prompt = f"""Tu es {character_data['name']}, {character_data['role']}.
-
-PERSONNALITÉ: {character_data['personality']}
-STYLE DE PAROLE: {character_data['speech_style']}
-HISTOIRE: {character_data['backstory']}
-
-{GAME_CONTEXT}
-
-ÉTAT ACTUEL DU JEU:
-- Humeur: {character_data['current_mood']}
-- Heure actuelle: {datetime.now().strftime('%H:%M')}
-- Or du joueur: {game_state['player_gold']}
-- Cookies du joueur: {game_state['player_cookies']}
-- Tissu du joueur: {game_state['player_fabric']}
-
-RÈGLES DE ROLEPLAY:
-1. Reste TOUJOURS dans ton rôle de {character_data['name']}
-2. Utilise ton style de parole unique
-3. Référence ton histoire personnelle et tes connaissances spéciales
-4. Réagis selon ta personnalité et ton humeur actuelle
-5. Garde en mémoire les interactions précédentes
-6. N'accepte les échanges que selon tes conditions spécifiques
-7. Sois cohérent avec les ressources du joueur
-
-CONNAISSANCES SPÉCIALES: {', '.join(character_data['special_knowledge'])}
-
-Réponds en français, reste dans le contexte du jeu, et limite tes réponses à 2-3 phrases maximum."""
-
-    return prompt
-
-def get_character_response(character_key: str, user_message: str) -> str:
-    """Obtient une réponse du personnage via Groq"""
+def initialize_rag_system():
+    """Initialise le système RAG"""
+    global rag_system
     
     try:
-        client = initialize_groq_client()
+        print("🚀 Initialisation du système RAG...")
+        rag_system = EchoForgeRAG(
+            data_path="./data",
+            vector_store_path="./vector_stores",
+            model_name="llama3.1:8b"
+        )
+        
+        # Vérifie si les vector stores existent, sinon les crée
+        print("📚 Vérification des vector stores...")
+        
+        # Vector store du monde
+        world_store_path = Path("./vector_stores/world_lore")
+        if not world_store_path.exists():
+            print("🌍 Construction du vector store du monde...")
+            rag_system.build_world_vectorstore()
+        
+        # Vector stores des personnages
+        for character_id in CHARACTERS.keys():
+            char_store_path = Path(f"./vector_stores/character_{character_id}")
+            if not char_store_path.exists():
+                print(f"👤 Construction du vector store pour {character_id}...")
+                rag_system.build_character_vectorstore(character_id)
+        
+        print("✅ Système RAG initialisé avec succès!")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Erreur lors de l'initialisation du RAG: {str(e)}")
+        return False
+
+def get_conversation_history_string(character_key: str, max_messages: int = 6) -> str:
+    """Récupère l'historique de conversation formaté pour un personnage"""
+    if character_key not in game_state["conversation_history"]:
+        return ""
+    
+    history = game_state["conversation_history"][character_key]
+    recent_history = history[-max_messages:] if len(history) > max_messages else history
+    
+    formatted_history = []
+    for msg in recent_history:
+        role = "Joueur" if msg["role"] == "user" else CHARACTERS[character_key]["name"]
+        formatted_history.append(f"{role}: {msg['content']}")
+    
+    return "\n".join(formatted_history)
+
+def get_character_response(character_key: str, user_message: str) -> str:
+    """Obtient une réponse du personnage via le système RAG"""
+    
+    if not rag_system:
+        return "❌ Système RAG non initialisé. Redémarrez l'application."
+    
+    try:
         character_data = CHARACTERS[character_key]
         
-        # Récupère l'historique pour ce personnage
+        # Parse le message utilisateur pour extraire les actions
+        parsed_input = rag_system.parse_actions(user_message)
+        
+        # Récupère les contextes pertinents
+        world_context = rag_system.retrieve_world_context(parsed_input.text, top_k=3)
+        character_context = rag_system.retrieve_character_context(
+            parsed_input.text, character_key, top_k=5
+        )
+        
+        # Récupère l'historique de conversation
+        conversation_history = get_conversation_history_string(character_key)
+        
+        # Crée le prompt complet
+        prompt = rag_system.create_character_prompt(
+            character_data=character_data,
+            world_context=world_context,
+            character_context=character_context,
+            parsed_input=parsed_input,
+            conversation_history=conversation_history
+        )
+        
+        # Génère la réponse via le LLM local
+        response = rag_system.llm.invoke(prompt)
+        
+        # Sauvegarde dans l'historique
         if character_key not in game_state["conversation_history"]:
             game_state["conversation_history"][character_key] = []
         
-        conversation_history = game_state["conversation_history"][character_key]
-        system_prompt = create_character_prompt(character_data, conversation_history, game_state)
+        game_state["conversation_history"][character_key].extend([
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": response}
+        ])
         
-        # Prépare les messages
-        messages = [
-            {"role": "system", "content": system_prompt}
-        ]
+        # Parse la réponse pour détecter des actions spéciales
+        process_character_actions(character_key, response, parsed_input)
         
-        # Ajoute l'historique récent (derniers 6 messages)
-        for msg in conversation_history[-6:]:
-            messages.append(msg)
-        
-        # Ajoute le message actuel
-        messages.append({"role": "user", "content": user_message})
-        
-        response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=messages,
-            temperature=0.7,
-            max_tokens=200
-        )
-        
-        character_response = response.choices[0].message.content
-        
-        # Sauvegarde dans l'historique
-        conversation_history.append({"role": "user", "content": user_message})
-        conversation_history.append({"role": "assistant", "content": character_response})
-        
-        return character_response
+        return response
         
     except Exception as e:
-        return f"❌ Erreur de communication: {str(e)}"
+        return f"❌ Erreur lors de la génération de réponse: {str(e)}"
+
+def process_character_actions(character_key: str, character_response: str, user_input: ActionParsed):
+    """Traite les actions spéciales du personnage et met à jour l'état du jeu"""
+    
+    character_data = CHARACTERS[character_key]
+    response_lower = character_response.lower()
+    
+    # Détection des actions basées sur le contenu de la réponse
+    if character_key == "fathira" and character_data.get("can_give_gold"):
+        if any(word in response_lower for word in ["donne", "offre", "voici", "prends"]) and "or" in response_lower:
+            if game_state["player_gold"] < 100:  # Limite pour éviter l'abus
+                game_state["player_gold"] += 10
+                print(f"💰 Fathira vous a donné 10 pièces d'or!")
+    
+    elif character_key == "roberte" and character_data.get("gives_cookies"):
+        if any(word in response_lower for word in ["donne", "offre", "voici", "prends"]) and "cookie" in response_lower:
+            if game_state["player_cookies"] < 20:  # Limite
+                game_state["player_cookies"] += 3
+                print(f"🍪 Roberte vous a donné 3 cookies!")
+    
+    elif character_key == "azzedine" and character_data.get("sells_fabric"):
+        if "tissu" in response_lower and game_state["player_gold"] >= 15:
+            if any(word in response_lower for word in ["vends", "achète", "prends", "voici"]):
+                game_state["player_gold"] -= 15
+                game_state["player_fabric"] += 1
+                print(f"🧶 Azzedine vous a vendu du tissu pour 15 or!")
+    
+    elif character_key == "claude" and character_data.get("can_repair"):
+        if "répare" in response_lower and game_state["player_cookies"] >= 5 and game_state["player_fabric"] >= 1:
+            if any(word in response_lower for word in ["répare", "réparer", "fini", "terminé"]):
+                game_state["player_cookies"] -= 5
+                game_state["player_fabric"] -= 1
+                game_state["montgolfiere_repaired"] = True
+                print(f"🎈 Claude a réparé votre montgolfière! Vous pouvez repartir!")
 
 def chat_interface(message: str, history: List[Tuple[str, str]], character_dropdown: str) -> Tuple[List[Tuple[str, str]], str]:
     """Interface de chat principal"""
     
     if not message.strip():
+        return history, ""
+    
+    if not rag_system:
+        error_msg = "❌ Système RAG non initialisé. Redémarrez l'application."
+        history.append((message, error_msg))
         return history, ""
     
     # Met à jour le personnage actuel
@@ -204,6 +257,8 @@ def get_game_status() -> str:
 **Montgolfière:** {repair_status}
 
 **Objectif:** Réparer votre montgolfière pour quitter l'île !
+
+**Système RAG:** {"✅ Actif" if rag_system else "❌ Non initialisé"}
 """
     return status
 
@@ -230,14 +285,14 @@ def create_interface():
         neutral_hue="slate",
     )
     
-    with gr.Blocks(theme=theme, title="🎈 EchoForge") as demo:
+    with gr.Blocks(theme=theme, title="🎈 EchoForge RAG") as demo:
         
         # En-tête
         gr.HTML("""
         <div style="text-align: center; padding: 20px;">
-            <h1>🎈 EchoForge</h1>
+            <h1>🎈 EchoForge RAG</h1>
             <h3>L'Île des Personnages Intelligents</h3>
-            <p><em>Donnez une âme à vos personnages</em></p>
+            <p><em>Donnez une âme à vos personnages avec RAG</em></p>
         </div>
         """)
         
@@ -267,7 +322,7 @@ def create_interface():
                 
                 msg = gr.Textbox(
                     label="Votre message",
-                    placeholder="Tapez votre message ici...",
+                    placeholder="Tapez votre message ici... (utilisez *action* pour les actions physiques)",
                     lines=2,
                     max_lines=4
                 )
@@ -302,6 +357,7 @@ def create_interface():
                 with gr.Column():
                     refresh_btn = gr.Button("🔄 Actualiser État", variant="secondary")
                     reset_btn = gr.Button("🆕 Nouveau Jeu", variant="stop")
+                    init_btn = gr.Button("🚀 Réinitialiser RAG", variant="secondary")
         
         # Logique des événements
         def update_character_info(character_key):
@@ -332,6 +388,14 @@ def create_interface():
 """
             return info_text
         
+        def reinitialize_rag():
+            """Réinitialise le système RAG"""
+            success = initialize_rag_system()
+            if success:
+                return get_game_status()
+            else:
+                return "❌ Échec de la réinitialisation du RAG"
+        
         # Connexions des événements
         msg.submit(chat_interface, [msg, chatbot, character_dropdown], [chatbot, msg])
         send_btn.click(chat_interface, [msg, chatbot, character_dropdown], [chatbot, msg])
@@ -339,6 +403,7 @@ def create_interface():
         refresh_btn.click(get_game_status, None, game_status)
         reset_btn.click(reset_game, None, [chatbot, game_status])
         character_dropdown.change(update_character_info, character_dropdown, character_info)
+        init_btn.click(reinitialize_rag, None, game_status)
         
         # Instructions en bas
         gr.HTML("""
@@ -346,6 +411,8 @@ def create_interface():
             <h4>🎯 Instructions</h4>
             <p>Vous êtes échoué sur une île après un crash de montgolfière. Interagissez avec les habitants pour obtenir les ressources nécessaires à votre réparation !</p>
             <p><strong>Astuce:</strong> Chaque personnage a ses propres motivations et conditions d'échange.</p>
+            <p><strong>Actions:</strong> Utilisez *votre action* pour décrire des actions physiques.</p>
+            <p><strong>RAG:</strong> Le système utilise la mémoire et le contexte des personnages pour des réponses plus intelligentes.</p>
         </div>
         """)
     
@@ -354,11 +421,15 @@ def create_interface():
 def main():
     """Lance l'application"""
     
-    # Vérification de la clé API
-    if GROQ_API_KEY == "your-groq-api-key-here":
-        print("⚠️  ATTENTION: Configurez votre clé API Groq !")
-        print("   export GROQ_API_KEY='votre_cle_ici'")
-        print("   ou créez un fichier .env avec GROQ_API_KEY=votre_cle_ici")
+    print("🎈 Démarrage d'EchoForge RAG...")
+    
+    # Initialisation du système RAG
+    if not initialize_rag_system():
+        print("❌ Impossible d'initialiser le système RAG.")
+        print("Vérifiez que:")
+        print("  - Ollama est installé et en cours d'exécution")
+        print("  - Les modèles llama3.1:8b et paraphrase-multilingual:278m-mpnet-base-v2-fp16 sont disponibles")
+        print("  - Le dossier ./data contient les données des personnages")
         return
     
     # Création et lancement de l'interface

@@ -1,0 +1,125 @@
+{
+  "world": {
+    "name": "Île de Sérénité",
+    "description": "Une île mystérieuse perdue dans l'océan Azur, connue pour ses courants atmosphériques imprévisibles qui attirent les montgolfières égarées. L'île est autosuffisante depuis des décennies et possède une riche histoire d'accueil des voyageurs naufragés.",
+    "climate": "Tropical avec des micro-climats créés par les cristaux de vent enfouis dans le sol",
+    "size": "Environ 15 kilomètres de diamètre",
+    "population": "347 habitants permanents"
+  },
+  "locations": [
+    {
+      "id": "village_center",
+      "name": "Centre du Village",
+      "type": "settlement",
+      "description": "Le cœur battant de l'île avec ses maisons colorées construites autour d'une place centrale ornée d'une fontaine aux eaux cristallines. Les bâtiments sont construits avec des pierres volcaniques locales et des bois flotté sculptés.",
+      "notable_buildings": ["Mairie", "Fontaine de la Paix", "Marché couvert"],
+      "atmosphere": "Animé le matin, paisible l'après-midi"
+    },
+    {
+      "id": "forge_quarter",
+      "name": "Quartier de la Forge",
+      "type": "industrial",
+      "description": "Zone artisanale où résonnent les coups de marteau de Claude le forgeron. L'air y est chaud et parfumé par les essences de métal fondu. Les étincelles dansent dans la brume matinale.",
+      "notable_features": ["Grande forge à trois foyers", "Stocks de métaux rares", "Atelier de réparation"],
+      "sounds": "Martellement rythmé, soufflets de forge"
+    },
+    {
+      "id": "textile_district",
+      "name": "District des Étoffes",
+      "type": "commercial",
+      "description": "Quartier coloré où Azzedine le styliste a installé son atelier. Les tissus précieux sèchent au vent sur des étendoirs ornementés. L'air embaume les teintures naturelles et les fibres exotiques.",
+      "notable_features": ["Atelier de haute couture", "Jardins de plantes tinctoriales", "Séchoirs à tissus"],
+      "specialties": ["Soies d'araignées dorées", "Lin de cristal", "Laines des moutons noirs des collines"]
+    },
+    {
+      "id": "culinary_corner",
+      "name": "Coin Culinaire",
+      "type": "residential",
+      "description": "Zone résidentielle dominée par l'imposante cuisine de Roberte. Les arômes de ses créations parfument tout le quartier. Un potager luxuriant entoure sa demeure.",
+      "notable_features": ["Cuisine aux cinq fourneaux", "Potager aux légumes rares", "Cellier aux épices"],
+      "specialties": ["Herbes aromatiques uniques", "Fruits de mer locaux", "Miel de fleurs de cristal"]
+    },
+    {
+      "id": "crystal_caves",
+      "name": "Grottes de Cristal",
+      "type": "natural",
+      "description": "Réseau de grottes naturelles où poussent des cristaux de vent luminescents. Ces cristaux sont responsables des phénomènes météorologiques étranges de l'île et émettent une douce lueur bleue.",
+      "notable_features": ["Cristaux de vent", "Formations géologiques uniques", "Écho mystérieux"],
+      "access": "Accès restreint, nécessite l'autorisation de la maire"
+    },
+    {
+      "id": "aerial_harbor",
+      "name": "Port Aérien",
+      "type": "infrastructure",
+      "description": "Ancienne plateforme de débarquement pour les voyageurs aériens, aujourd'hui principalement utilisée pour les réparations d'urgence. Vue imprenable sur l'océan et les courants de vent.",
+      "notable_features": ["Plateforme d'atterrissage", "Mât de vent", "Atelier de réparation aérienne"],
+      "status": "En cours de rénovation sous la supervision de Claude"
+    }
+  ],
+  "history": [
+    {
+      "year": "1847",
+      "event": "Découverte de l'île par le navigateur-aérien Capitaine Ventmort lors d'une tempête",
+      "significance": "Première colonisation de l'île"
+    },
+    {
+      "year": "1852",
+      "event": "Construction de la première forge par Maître Ésaü, grand-père de Claude",
+      "significance": "Début de l'industrie métallurgique locale"
+    },
+    {
+      "year": "1889",
+      "event": "Grande Tempête de Cristal - découverte des propriétés magiques des cristaux souterrains",
+      "significance": "Révélation du mystère météorologique de l'île"
+    },
+    {
+      "year": "1923",
+      "event": "Fondation de la République Insulaire avec l'élection du premier maire",
+      "significance": "Établissement du système politique actuel"
+    },
+    {
+      "year": "2010",
+      "event": "Arrivée de la famille d'Azzedine, réfugiés de la Grande Île du Sud",
+      "significance": "Enrichissement culturel et artisanal"
+    },
+    {
+      "year": "2015",
+      "event": "Élection de Fathira comme maire, première femme à occuper ce poste",
+      "significance": "Modernisation et ouverture de l'île"
+    }
+  ],
+  "culture": {
+    "traditions": [
+      "Festival des Vents Dansants (chaque solstice d'été)",
+      "Cérémonie d'Accueil des Naufragés (pour chaque nouveau visiteur)",
+      "Marché des Trois Lunes (tous les 15 jours)"
+    ],
+    "values": ["Hospitalité", "Artisanat traditionnel", "Respect de la nature", "Entraide communautaire"],
+    "language": "Français insulaire avec des expressions locales influencées par les vents",
+    "currency": "Pièces de cristal poli et système de troc"
+  },
+  "mysteries": {
+    "crystal_phenomena": "Les cristaux de vent semblent réagir aux émotions des habitants",
+    "weather_patterns": "Les tempêtes arrivent toujours quand l'île a besoin de nouveaux visiteurs",
+    "ancient_ruins": "Vestiges d'une civilisation pré-coloniale dans les grottes profondes",
+    "aerial_currents": "Courants aériens qui semblent guidés par une intelligence inconnue"
+  },
+  "resources": {
+    "natural": ["Cristaux de vent", "Pierres volcaniques", "Bois flotté sculpté", "Herbes aromatiques"],
+    "crafted": ["Métaux forgés", "Tissus précieux", "Spécialités culinaires", "Objets en cristal"],
+    "rare": ["Soie d'araignée dorée", "Miel de cristal", "Essence de vent", "Perles de tempête"]
+  },
+  "climate_details": {
+    "seasons": {
+      "saison_des_vents_doux": "Printemps - brises légères et parfumées",
+      "saison_des_grands_souffles": "Été - vents puissants mais prévisibles",
+      "saison_des_murmures": "Automne - vents faibles et mystérieux",
+      "saison_des_tempêtes": "Hiver - orages fréquents mais de courte durée"
+    },
+    "phenomena": [
+      "Brouillards luminescents au lever du soleil",
+      "Pluies colorées dues aux cristaux en suspension",
+      "Tourbillons d'air chaud près des grottes"
+    ]
+  }
+}

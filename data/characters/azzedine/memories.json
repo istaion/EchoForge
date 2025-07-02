@@ -1,0 +1,56 @@
+{
+  "character_id": "azzedine",
+  "memories": [
+    {
+      "id": "arrival_island",
+      "period": "adulte",
+      "age_range": "30 ans",
+      "memory": "Arrivée mouvementée sur l'île de Sérénité. Critique ouverte de l'esthétique portuaire, causant une première tension avec Fathira.",
+      "emotion": "frustration_exigence",
+      "importance": "medium",
+      "triggers": ["port", "fathira", "arrivée", "critique", "ambition"]
+    },
+    {
+      "id": "festival_costumes",
+      "period": "adulte",
+      "age_range": "33 ans",
+      "memory": "Création de costumes somptueux pour le Festival des Vents Dansants. L'admiration du public l’a ému au-delà des mots.",
+      "emotion": "fierté_reconnaissance",
+      "importance": "high",
+      "triggers": ["festival", "costumes", "création", "reconnaissance", "public"]
+    },
+    {
+      "id": "secret_talent_glimpse",
+      "period": "adulte",
+      "age_range": "33 ans",
+      "memory": "Remarqué que ses créations influencent l’humeur des gens. Il pense à une coïncidence mais reste intrigué.",
+      "emotion": "curiosité_incompréhension",
+      "importance": "medium",
+      "triggers": ["créations", "effet", "magie", "tissu", "influence"]
+    },
+    {
+      "id": "mother_lessons",
+      "period": "enfance",
+      "age_range": "10 ans",
+      "memory": "Apprentissage de la couture avec sa mère dans la grande maison de la Grande Île du Sud. Elle répétait toujours que chaque couture avait une âme.",
+      "emotion": "nostalgie_amour",
+      "importance": "high",
+      "triggers": ["mère", "couture", "apprentissage", "âme", "enfance"]
+    },
+    {
+      "id": "textile_obsession",
+      "period": "adolescence",
+      "age_range": "17 ans",
+      "memory": "Premier tissu qu’il a teint lui-même : un bleu profond qu’il n’a jamais réussi à recréer. C’est devenu son obsession.",
+      "emotion": "obstination_mystère",
+      "importance": "medium",
+      "triggers": ["tissu", "bleu", "expérimentation", "art"]
+    }
+  ],
+  "memory_patterns": {
+    "dominant_themes": ["esthétique", "perfection", "mystère du textile"],
+    "key_relationships": ["fathira", "clients_île", "mère"],
+    "formative_events": ["arrivée_île", "festival_costumes"],
+    "emotional_anchors": ["besoin_reconnaissance", "quête_perfection", "attachement_maternel"]
+  }
+}
