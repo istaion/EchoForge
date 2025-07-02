@@ -105,8 +105,7 @@ def initialize_rag_system():
         print("🚀 Initialisation du système RAG...")
         rag_system = EchoForgeRAG(
             data_path="./data",
-            vector_store_path="./vector_stores",
-            model_name="llama3.1:8b"
+            vector_store_path="./vector_stores"
         )
         
         print("📚 Vérification des vector stores...")
