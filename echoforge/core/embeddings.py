@@ -3,15 +3,15 @@ Gestion des embeddings pour le système RAG
 """
 
 from typing import List, Optional
-from abc import ABC, abstractmethod
-
+from abc import abstractmethod
+from langchain.embeddings.base import Embeddings
 try:
     from langchain_ollama import OllamaEmbeddings
 except ImportError:
     from langchain.embeddings import OllamaEmbeddings
 
 
-class EmbeddingInterface(ABC):
+class EmbeddingInterface(Embeddings):
     """Interface abstraite pour les embeddings"""
     
     @abstractmethod
@@ -23,6 +23,9 @@ class EmbeddingInterface(ABC):
     def embed_query(self, text: str) -> List[float]:
         """Génère l'embedding pour une requête"""
         pass
+
+    def __call__(self, texts: List[str]) -> List[List[float]]:
+        return self.embed_documents(texts)
 
 
 class OllamaEmbeddingProvider(EmbeddingInterface):
