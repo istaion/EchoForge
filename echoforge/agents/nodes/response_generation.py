@@ -3,8 +3,11 @@
 import random
 from typing import Dict, Any, List
 from ..state.character_state import CharacterState
+from langsmith import traceable
+from echoforge.utils.config import get_config
 
-
+config = get_config()
+@traceable
 def generate_simple_response(state: CharacterState) -> CharacterState:
     """
     Génère une réponse simple basée sur la personnalité, sans RAG.
@@ -39,7 +42,7 @@ def generate_simple_response(state: CharacterState) -> CharacterState:
     
     return state
 
-
+@traceable
 def generate_response(state: CharacterState) -> CharacterState:
     """
     Génère une réponse complexe avec ou sans contexte RAG.
@@ -84,7 +87,7 @@ def generate_response(state: CharacterState) -> CharacterState:
     
     return state
 
-
+@traceable
 def _generate_personality_response(
     character_name: str, 
     personality: Dict[str, Any], 
@@ -185,7 +188,7 @@ def _generate_personality_response(
     
     return response
 
-
+@traceable
 def _build_response_context(state: CharacterState) -> Dict[str, Any]:
     """Construit le contexte pour la génération de réponse."""
     
@@ -208,7 +211,7 @@ def _build_response_context(state: CharacterState) -> Dict[str, Any]:
     
     return context
 
-
+@traceable
 def _generate_rag_enhanced_response(
     character_name: str,
     personality: Dict[str, Any], 
@@ -262,7 +265,7 @@ def _generate_rag_enhanced_response(
     
     return response
 
-
+@traceable
 def _generate_contextual_response(
     character_name: str,
     personality: Dict[str, Any],

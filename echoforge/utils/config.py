@@ -38,9 +38,15 @@ class EchoForgeConfig(BaseSettings):
     max_conversation_history: int = Field(default=10, description="Historique max de conversation")
     llm_temperature: float = Field(default=0.7, description="Température du LLM")
     
-    # API Keys (optionnel)
+    # API Keys
     groq_api_key: Optional[str] = Field(default=None, description="Clé API Groq")
     openai_api_key: Optional[str] = Field(default=None, description="Clé API OpenAI")
+    
+    # 🆕 LangSmith Configuration
+    langsmith_tracing: bool = Field(default=True, description="Activer le tracing LangSmith")
+    langsmith_endpoint: str = Field(default="https://api.smith.langchain.com", description="Endpoint LangSmith")
+    langsmith_api_key: Optional[str] = Field(default=None, description="Clé API LangSmith")
+    langsmith_project: str = Field(default="echoforge-dev", description="Nom du projet LangSmith")
     
     # Interface
     gradio_server_name: str = Field(default="0.0.0.0", description="Nom du serveur Gradio")
@@ -57,6 +63,19 @@ class EchoForgeConfig(BaseSettings):
         # Assure-toi que les chemins existent
         self.data_path.mkdir(exist_ok=True)
         self.vector_store_path.mkdir(exist_ok=True)
+        
+        # 🆕 Configure LangSmith automatiquement
+        self._setup_langsmith()
+    
+    def _setup_langsmith(self):
+        """Configure les variables d'environnement LangSmith"""
+        if self.langsmith_tracing:
+            os.environ["LANGCHAIN_TRACING_V2"] = "false"
+            os.environ["LANGCHAIN_ENDPOINT"] = self.langsmith_endpoint
+            os.environ["LANGCHAIN_PROJECT"] = self.langsmith_project
+            
+            if self.langsmith_api_key:
+                os.environ["LANGCHAIN_API_KEY"] = self.langsmith_api_key
     
     @classmethod
     def from_env_file(cls, env_file: str = ".env") -> "EchoForgeConfig":

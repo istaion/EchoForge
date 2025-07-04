@@ -1,18 +1,21 @@
 """Graphe principal pour les personnages EchoForge utilisant LangGraph."""
 
-from langgraph import StateGraph, END
+from langgraph.graph import StateGraph, END
 from ..state.character_state import CharacterState
 from ..nodes.perception import perceive_input
 from ..nodes.rag_assessment import assess_rag_need
 from ..nodes.rag_search import perform_rag_search
 from ..nodes.response_generation import generate_simple_response, generate_response
 from ..nodes.memory_update import update_character_memory, finalize_interaction
+from langsmith import traceable
 from ..conditions.complexity_router import (
     route_by_complexity, 
     route_by_rag_need, 
     check_if_needs_memory_update
 )
+from echoforge.utils.config import get_config
 
+config = get_config()
 
 def create_character_graph() -> StateGraph:
     """
@@ -139,7 +142,8 @@ class CharacterGraphManager:
         self.simple_graph = create_simple_chat_graph()
         self.compiled_main = self.main_graph.compile()
         self.compiled_simple = self.simple_graph.compile()
-    
+
+    @traceable
     async def process_message(
         self, 
         user_message: str, 
@@ -178,6 +182,7 @@ class CharacterGraphManager:
         
         return result
     
+    @traceable
     def _build_initial_state(self, user_message: str, character_data: dict) -> CharacterState:
         """Construit l'état initial pour le graphe."""
         
@@ -222,11 +227,7 @@ class CharacterGraphManager:
         """Détermine si le graphe simple doit être utilisé."""
         
         message_lower = user_message.lower().strip()
-        
-        # Messages très courts
-        if len(message_lower) < 10:
-            return True
-        
+
         # Patterns simples
         simple_patterns = [
             "bonjour", "salut", "hey", "hello",
@@ -235,7 +236,10 @@ class CharacterGraphManager:
             "oui", "non", "peut-être"
         ]
         
-        return any(pattern in message_lower for pattern in simple_patterns)
+        if len(message_lower) < 10 and any(pattern in message_lower for pattern in simple_patterns):
+            return True
+        
+        return False
     
     def get_graph_visualization(self, graph_type: str = "main") -> str:
         """

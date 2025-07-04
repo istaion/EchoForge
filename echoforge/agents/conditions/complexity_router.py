@@ -1,7 +1,9 @@
 """Routeurs conditionnels pour les graphes LangGraph."""
 
 from ..state.character_state import CharacterState, ComplexityLevel
+from echoforge.utils.config import get_config
 
+config = get_config()
 
 def route_by_complexity(state: CharacterState) -> str:
     """

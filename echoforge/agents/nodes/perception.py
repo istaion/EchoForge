@@ -4,8 +4,11 @@ import time
 import re
 from typing import Dict, Any
 from ..state.character_state import CharacterState, ComplexityLevel
+from langsmith import traceable
+from echoforge.utils.config import get_config
 
-
+config = get_config()
+@traceable
 def perceive_input(state: CharacterState) -> CharacterState:
     """
     Nœud de perception - analyse l'input utilisateur et initialise l'état.

@@ -3,8 +3,11 @@
 import re
 from typing import List, Optional
 from ..state.character_state import CharacterState
+from langsmith import traceable
+from echoforge.utils.config import get_config
 
-
+config = get_config()
+@traceable
 def assess_rag_need(state: CharacterState) -> CharacterState:
     """
     Évalue si une recherche RAG est nécessaire pour répondre à la requête.
@@ -123,7 +126,7 @@ def _detailed_rag_analysis(message: str, intent: str, state: CharacterState) -> 
         "reasoning": f"Score: {score_rag}, Seuil: 2, Indicators: {len(matched_indicators)}"
     }
 
-
+@traceable
 def _build_rag_query(message: str, intent: str, indicators: List[str]) -> str:
     """Construit une requête optimisée pour le système RAG."""
     

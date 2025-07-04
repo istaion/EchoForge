@@ -10,7 +10,10 @@ from PIL import Image, ImageDraw
 import math
 import asyncio
 import time
+from langsmith import traceable
+from echoforge.utils.config import get_config
 
+config = get_config()
 # Import du système d'agents LangGraph
 try:
     from echoforge.agents.graphs.character_graph import CharacterGraphManager
@@ -320,7 +323,8 @@ class RAGSystemWrapper:
             if not char_store_path.exists():
                 print(f"👤 Construction du vector store pour {character_id}...")
                 self.rag_system.build_character_vectorstore(character_id)
-    
+
+    @traceable
     async def get_character_response(self, character_key: str, user_message: str) -> str:
         """Obtient une réponse via le système RAG."""
         if not self.initialized:

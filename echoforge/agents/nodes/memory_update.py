@@ -3,8 +3,11 @@
 import time
 from typing import Dict, Any
 from ..state.character_state import CharacterState
+from langsmith import traceable
+from echoforge.utils.config import get_config
 
-
+config = get_config()
+@traceable
 def update_character_memory(state: CharacterState) -> CharacterState:
     """
     Met à jour la mémoire du personnage avec l'interaction actuelle.

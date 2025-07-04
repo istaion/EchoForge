@@ -2,8 +2,9 @@
 
 from typing import List, Dict, Optional, TypedDict, Any
 from enum import Enum
+from echoforge.utils.config import get_config
 
-
+config = get_config()
 class ComplexityLevel(str, Enum):
     """Niveaux de complexité pour les requêtes."""
     SIMPLE = "simple"
