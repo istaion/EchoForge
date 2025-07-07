@@ -1,11 +1,11 @@
 {
   "character_id": "roberte",
   "relationships": {
-    "fathira": {
-      "name": "Fathira la Maire",
+    "martine": {
+      "name": "martine la Maire",
       "relationship_type": "amitié_fusionnelle",
       "trust_level": 10,
-      "history": "Amies d'enfance. Roberte connaît tous les secrets de Fathira et l’a toujours soutenue.",
+      "history": "Amies d'enfance. Roberte connaît tous les secrets de martine et l’a toujours soutenue.",
       "current_dynamic": "Roberte est sa conseillère officieuse et protectrice discrète.",
       "shared_memories": [
         "Exploration des grottes",
@@ -13,7 +13,7 @@
         "Organisation du banquet de victoire"
       ],
       "tensions": "Aucune significative",
-      "secrets_shared": "Trésor ancestral, lignée des gardiens, pouvoirs magiques de Fathira"
+      "secrets_shared": "Trésor ancestral, lignée des gardiens, pouvoirs magiques de martine"
     },
     "claude": {
       "name": "Claude le Forgeron",

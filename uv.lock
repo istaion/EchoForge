@@ -327,15 +327,26 @@ wheels = [
 ]
 
 [[package]]
+name = "distro"
+version = "1.9.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/fc/f8/98eea607f65de6527f8a2e8885fc8015d3e6f5775df186e443e0964a11c3/distro-1.9.0.tar.gz", hash = "sha256:2fa77c6fd8940f116ee1d6b94a2f90b13b5ea8d019b98bc8bafdcabcdd9bdbed", size = 60722, upload-time = "2023-12-24T09:54:32.31Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/12/b3/231ffd4ab1fc9d679809f356cebee130ac7daa00d6d6f3206dd4fd137e9e/distro-1.9.0-py3-none-any.whl", hash = "sha256:7bffd925d65168f85027d8da9af6bddab658135b840670a223589bc0c8ef02b2", size = 20277, upload-time = "2023-12-24T09:54:30.421Z" },
+]
+
+[[package]]
 name = "echoforge"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "faiss-cpu" },
     { name = "gradio" },
+    { name = "groq" },
     { name = "ipykernel" },
     { name = "langchain" },
     { name = "langchain-community" },
+    { name = "langchain-groq" },
     { name = "langchain-ollama" },
     { name = "langgraph" },
     { name = "langsmith" },
@@ -348,9 +359,11 @@ dependencies = [
 requires-dist = [
     { name = "faiss-cpu", specifier = ">=1.11.0" },
     { name = "gradio", specifier = ">=5.35.0" },
+    { name = "groq", specifier = ">=0.29.0" },
     { name = "ipykernel", specifier = ">=6.29.5" },
     { name = "langchain", specifier = ">=0.3.26" },
     { name = "langchain-community", specifier = ">=0.3.26" },
+    { name = "langchain-groq", specifier = ">=0.3.5" },
     { name = "langchain-ollama", specifier = ">=0.3.3" },
     { name = "langgraph", specifier = ">=0.5.1" },
     { name = "langsmith", specifier = ">=0.4.4" },
@@ -588,6 +601,23 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/52/36/bbdede67400277bef33d3ec0e6a31750da972c469f75966b4930c753218f/groovy-0.1.2.tar.gz", hash = "sha256:25c1dc09b3f9d7e292458aa762c6beb96ea037071bf5e917fc81fb78d2231083", size = 17325, upload-time = "2025-02-28T20:24:56.068Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/28/27/3d6dcadc8a3214d8522c1e7f6a19554e33659be44546d44a2f7572ac7d2a/groovy-0.1.2-py3-none-any.whl", hash = "sha256:7f7975bab18c729a257a8b1ae9dcd70b7cafb1720481beae47719af57c35fa64", size = 14090, upload-time = "2025-02-28T20:24:55.152Z" },
+]
+
+[[package]]
+name = "groq"
+version = "0.29.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "distro" },
+    { name = "httpx" },
+    { name = "pydantic" },
+    { name = "sniffio" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8c/d6/db0c61bad6ff6a2ba7083a943c62790f37969cb337d96a5a914cd3ac4311/groq-0.29.0.tar.gz", hash = "sha256:109dc4d696c05d44e4c2cd157652c4c6600c3e96f093f6e158facb5691e37847", size = 133989, upload-time = "2025-06-25T23:40:11.508Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a2/0b/ef7a92ec5ec23a7012975ed59ca3cef541d50a9f0d2dea947fe2723d011f/groq-0.29.0-py3-none-any.whl", hash = "sha256:03515ec46be1ef1feef0cd9d876b6f30a39ee2742e76516153d84acd7c97f23a", size = 130814, upload-time = "2025-06-25T23:40:10.391Z" },
 ]
 
 [[package]]
@@ -868,6 +898,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/c2/40/875af0194024d0006874f061958fa417d3500bbfdc9a57e1bd1c2f4e6ed2/langchain_core-0.3.67.tar.gz", hash = "sha256:2c14aa44a0e78e014e96d7f2f8916ac109d0a0ba87ed67ee25bf7296bed7e7ba", size = 561952, upload-time = "2025-06-30T17:09:35.142Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9f/2b/a0d283089c6d08c12d47dca39a55029ff714e939ec04f4560420426ab613/langchain_core-0.3.67-py3-none-any.whl", hash = "sha256:b699f1f24b24fa2747c05e2daa280aa64478a51e01a4e82c7f8e20b6167dfa99", size = 440237, upload-time = "2025-06-30T17:09:33.323Z" },
+]
+
+[[package]]
+name = "langchain-groq"
+version = "0.3.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "groq" },
+    { name = "langchain-core" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/45/05/3fb16fcc1aedb63cee7d7615de501538e927ad632e5cd5fb8538e7cf077b/langchain_groq-0.3.5.tar.gz", hash = "sha256:aadef09287847ff6b02bc6d0d070936e0c37a8d82b4724495b650b069c9fc4e6", size = 23280, upload-time = "2025-07-01T17:29:23.493Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ba/b0/1381a66f8b53e4e3e7389d4e2ac7a528023d0d41b31ebe1397970e83114f/langchain_groq-0.3.5-py3-none-any.whl", hash = "sha256:0f86559ccd3838015aa8e6ff3047ae08d6204eb3fe2e8386d21a21d907c2acf8", size = 15958, upload-time = "2025-07-01T17:29:22.478Z" },
 ]
 
 [[package]]

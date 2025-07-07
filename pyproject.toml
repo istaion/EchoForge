@@ -22,6 +22,8 @@ dependencies = [
     # Notebooks
     "ipykernel>=6.29.5",
     "langgraph>=0.5.1",
+    "groq>=0.29.0",
+    "langchain-groq>=0.3.5",
 ]
 
 

@@ -22,7 +22,7 @@ class EchoForgeRAG:
                  vector_store_path: str = "./vector_stores",
                  embedding_model: str = "paraphrase-multilingual:278m-mpnet-base-v2-fp16",
                  llm_model: str = "llama3.1:8b",
-                 llm_provider: Optional[LLMProvider] = None,
+                 llm_provider: Optional[str] = None,
                  embedding_provider: Optional[EmbeddingInterface] = None):
         
         # Configuration des chemins

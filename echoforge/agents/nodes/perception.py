@@ -1,14 +1,57 @@
-"""Nœud de perception pour analyser l'input utilisateur."""
-
 import time
 import re
 from typing import Dict, Any
 from ..state.character_state import CharacterState, ComplexityLevel
 from langsmith import traceable
 from echoforge.utils.config import get_config
+from langgraph.graph import StateNode
+from core.llm_providers import LLMManager
 
 config = get_config()
 @traceable
+def interpret_player_input_node(llm_manager: LLMManager) -> StateNode:
+    def fn(state: CharacterState) -> CharacterState:
+        user_msg = state["user_message"]
+        
+        # Prompt pour scorer les probabilités de triggers
+        prompt = f"""
+Tu es un détecteur d’intention dans un jeu de rôle narratif. Le message du joueur est :
+
+"{user_msg}"
+
+Voici la liste des déclencheurs possibles :
+{state['input_trigger_probs']}
+
+Pour chaque déclencheur, donne une probabilité entre 0.0 et 1.0 qu’il soit présent dans ce message, au format JSON :
+{{
+  "bye": ...,
+  "ask_for_money": ...
+}}
+
+Répond uniquement avec l'objet JSON.
+"""
+        result = llm_manager.invoke(prompt)
+
+        try:
+            trigger_probs = json.loads(result)
+        except json.JSONDecodeError:
+            trigger_probs = {"bye": 0.0, "ask_for_money": 0.0}
+            state["debug_info"]["interpret_error"] = "LLM returned invalid JSON"
+
+        # Choix du message_intent le plus probable
+        best_trigger = max(trigger_probs.items(), key=lambda x: x[1])[0]
+        best_score = trigger_probs[best_trigger]
+
+        # Mise à jour du state
+        state["parsed_message"] = user_msg
+        state["message_intent"] = best_trigger if best_score > 0.5 else None
+        state["input_trigger_probs"] = trigger_probs
+        state["processing_steps"].append("interpret_player_input")
+
+        return state
+
+    return StateNode(fn=fn)
+
 def perceive_input(state: CharacterState) -> CharacterState:
     """
     Nœud de perception - analyse l'input utilisateur et initialise l'état.
@@ -101,13 +144,7 @@ def _assess_initial_complexity(message: str, intent: str) -> ComplexityLevel:
     if any(pattern in message_lower for pattern in simple_patterns) and word_count <= 3:
         return ComplexityLevel.SIMPLE
     
-    if any(pattern in message_lower for pattern in complex_patterns) or word_count > 15:
-        return ComplexityLevel.COMPLEX
-    
-    # Selon l'intention
-    if intent in ["greeting", "farewell", "small_talk"]:
-        return ComplexityLevel.SIMPLE
-    elif intent in ["question", "request", "emotional"]:
+    if word_count > 15:
         return ComplexityLevel.COMPLEX
     
     return ComplexityLevel.MEDIUM

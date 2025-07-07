@@ -5,10 +5,10 @@
       "id": "arrival_island",
       "period": "adulte_jeune",
       "age_range": "25 ans",
-      "memory": "Arrivée sur l'île après avoir fui son ancienne vie. Il a été accueilli par Fathira qui lui a offert une chance de recommencer.",
+      "memory": "Arrivée sur l'île après avoir fui son ancienne vie. Il a été accueilli par martine qui lui a offert une chance de recommencer.",
       "emotion": "gratitude_renouveau",
       "importance": "very_high",
-      "triggers": ["arrivée", "fathira", "nouveau départ", "forgeron", "reconnaissance"]
+      "triggers": ["arrivée", "martine", "nouveau départ", "forgeron", "reconnaissance"]
     },
     {
       "id": "forge_construction",
@@ -23,10 +23,10 @@
       "id": "storm_repair",
       "period": "adulte",
       "age_range": "32 ans",
-      "memory": "Travail d’urgence avec Fathira pendant la grande tempête. Il a réparé le pont sous la pluie battante.",
+      "memory": "Travail d’urgence avec martine pendant la grande tempête. Il a réparé le pont sous la pluie battante.",
       "emotion": "tension_solidarité",
       "importance": "high",
-      "triggers": ["tempête", "réparation", "pont", "urgence", "fathira"]
+      "triggers": ["tempête", "réparation", "pont", "urgence", "martine"]
     },
     {
       "id": "childhood_blacksmithing",
@@ -49,7 +49,7 @@
   ],
   "memory_patterns": {
     "dominant_themes": ["réparation", "fuite", "loyauté", "artisanat"],
-    "key_relationships": ["fathira", "roberte", "habitants"],
+    "key_relationships": ["martine", "roberte", "habitants"],
     "formative_events": ["arrivée", "tempête", "construction_forge"],
     "emotional_anchors": ["intégrité", "discrétion", "reconnaissance"]
   }

@@ -1,5 +1,3 @@
-"""Nœud de mise à jour de la mémoire du personnage."""
-
 import time
 from typing import Dict, Any
 from ..state.character_state import CharacterState

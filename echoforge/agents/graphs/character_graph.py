@@ -193,8 +193,7 @@ class CharacterGraphManager:
             
             # Analyse (sera remplie par le graphe)
             parsed_message=None,
-            message_intent=None,
-            complexity_level="medium",
+            message_intent=None
             
             # Personnage
             character_name=character_data.get("name", "unknown"),
@@ -213,15 +212,52 @@ class CharacterGraphManager:
             relevant_knowledge=[],
             
             # Actions
-            planned_actions=[],
-            triggered_events=[],
-            game_state_changes={},
+            input_trigger_probs=character_data.get("triggers")
             
             # Métadonnées
             processing_start_time=0.0,
             processing_steps=[],
             debug_info={}
         )
+    # def _build_initial_state(self, user_message: str, character_data: dict) -> CharacterState:
+    #     """Construit l'état initial pour le graphe."""
+        
+    #     return CharacterState(
+    #         # Input
+    #         user_message=user_message,
+    #         response="",
+            
+    #         # Analyse (sera remplie par le graphe)
+    #         parsed_message=None,
+    #         message_intent=None,
+    #         complexity_level="medium",
+            
+    #         # Personnage
+    #         character_name=character_data.get("name", "unknown"),
+    #         personality_traits=character_data.get("personality", {}),
+    #         current_emotion=character_data.get("current_emotion", "neutral"),
+    #         character_knowledge=character_data.get("knowledge", []),
+            
+    #         # Conversation
+    #         conversation_history=character_data.get("conversation_history", []),
+    #         context_summary=None,
+            
+    #         # RAG
+    #         needs_rag_search=False,
+    #         rag_query=None,
+    #         rag_results=[],
+    #         relevant_knowledge=[],
+            
+    #         # Actions
+    #         planned_actions=[],
+    #         triggered_events=[],
+    #         game_state_changes={},
+            
+    #         # Métadonnées
+    #         processing_start_time=0.0,
+    #         processing_steps=[],
+    #         debug_info={}
+    #     )
     
     def _should_use_simple_graph(self, user_message: str) -> bool:
         """Détermine si le graphe simple doit être utilisé."""

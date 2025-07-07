@@ -32,7 +32,7 @@ def main():
     if not rag_system.vector_store_manager.store_exists("world_lore"):
         print("🌍 Construction du vector store du monde...")
         rag_system.build_world_vectorstore()
-    
+    rag_system.rebuild_all_vectorstores()
     print("🎯 Framework prêt à l'emploi!")
 
 

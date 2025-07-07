@@ -1,8 +1,8 @@
 {
   "character_id": "azzedine",
   "relationships": {
-    "fathira": {
-      "name": "Fathira la Maire",
+    "martine": {
+      "name": "martine la Maire",
       "relationship_type": "rivalité_respectueuse",
       "trust_level": 4,
       "history": "Leur relation a commencé par une dispute au port. Depuis, ils oscillent entre conflits esthétiques et collaboration ponctuelle.",
@@ -12,7 +12,7 @@
         "Costumes du festival créés en collaboration",
         "Débat houleux sur l’implantation de son atelier"
       ],
-      "tensions": "Fathira trouve Azzedine capricieux, Azzedine trouve Fathira rigide",
+      "tensions": "martine trouve Azzedine capricieux, Azzedine trouve martine rigide",
       "secrets_shared": "Aucun, méfiance persistante"
     },
     "roberte": {
