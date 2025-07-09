@@ -19,9 +19,10 @@ class CharacterState(TypedDict):
     
     # === CONTEXTE PERSONNAGE ===
     character_name: str
-    personality_traits: Dict[str, Any]
-    current_emotion: str
-    character_knowledge: List[str]
+    character_data: Dict[str, Any]
+    # personality_traits: Dict[str, Any]
+    # current_emotion: str
+    # character_knowledge: List[str]
     
     # === CONTEXTE CONVERSATIONNEL ===
     conversation_history: List[Dict[str, str]]

@@ -1,6 +1,6 @@
 """Routeurs conditionnels pour les graphes LangGraph."""
 
-from ..state.character_state import CharacterState, ComplexityLevel
+from ..state.character_state import CharacterState
 from echoforge.utils.config import get_config
 
 config = get_config()
@@ -15,18 +15,18 @@ def route_by_complexity(state: CharacterState) -> str:
     Returns:
         Nom du prochain nœud à exécuter
     """
-    complexity = state["complexity_level"]
+    # complexity = state["complexity_level"]
     
-    # Ajout d'informations de debug
-    state["processing_steps"].append(f"complexity_routing_{complexity}")
+    # # Ajout d'informations de debug
+    # state["processing_steps"].append(f"complexity_routing_{complexity}")
     
-    # Routage selon la complexité
-    if complexity == ComplexityLevel.SIMPLE:
-        return "simple_response"
-    elif complexity == ComplexityLevel.MEDIUM:
-        return "assess_rag_need"
-    else:  # ComplexityLevel.COMPLEX
-        return "assess_rag_need"
+    # # Routage selon la complexité
+    # if complexity == ComplexityLevel.SIMPLE:
+    #     return "simple_response"
+    # elif complexity == ComplexityLevel.MEDIUM:
+    #     return "assess_rag_need"
+    # else:  # ComplexityLevel.COMPLEX
+    return "assess_rag_need"
 
 
 def route_by_rag_need(state: CharacterState) -> str:
@@ -63,14 +63,14 @@ def check_if_needs_memory_update(state: CharacterState) -> str:
     # Critères pour mise à jour mémoire
     message_length = len(state["user_message"].split())
     has_emotional_content = state["message_intent"] == "emotional"
-    has_game_actions = bool(state["planned_actions"])
+    # has_game_actions = bool(state["planned_actions"])
     
     needs_memory_update = (
         message_length > 5 or 
-        has_emotional_content or 
-        has_game_actions or
-        state["complexity_level"] == ComplexityLevel.COMPLEX
-    )
+        has_emotional_content)
+        # has_game_actions or
+        # state["complexity_level"] == ComplexityLevel.COMPLEX
+    
     
     state["processing_steps"].append(f"memory_routing_{'update' if needs_memory_update else 'skip'}")
     

@@ -1,18 +1,19 @@
 """Graphe principal pour les personnages EchoForge utilisant LangGraph."""
 
 from langgraph.graph import StateGraph, END
-from ..state.character_state import CharacterState
-from ..nodes.perception import perceive_input
-from ..nodes.rag_assessment import assess_rag_need
-from ..nodes.rag_search import perform_rag_search
-from ..nodes.response_generation import generate_simple_response, generate_response
-from ..nodes.memory_update import update_character_memory, finalize_interaction
+from echoforge.agents.state.character_state import CharacterState
+from echoforge.agents.nodes.perception import perceive_input, interpret_player_input_node, decide_intent_node
+from echoforge.agents.nodes.rag_assessment import assess_rag_need
+from echoforge.agents.nodes.rag_search import perform_rag_search
+from echoforge.agents.nodes.response_generation import generate_simple_response, generate_response
+from echoforge.agents.nodes.memory_update import update_character_memory, finalize_interaction
 from langsmith import traceable
-from ..conditions.complexity_router import (
+from echoforge.agents.conditions.complexity_router import (
     route_by_complexity, 
     route_by_rag_need, 
     check_if_needs_memory_update
 )
+from echoforge.core.llm_providers import LLMManager
 from echoforge.utils.config import get_config
 
 config = get_config()
@@ -36,6 +37,10 @@ def create_character_graph() -> StateGraph:
     # Nœud d'entrée : perception et analyse du message
     graph.add_node("perceive", perceive_input)
     
+    # Analyse des triggers :
+    graph.add_node("interpret_input", interpret_player_input_node(llm_manager=LLMManager()))
+    graph.add_node("decide_intent", decide_intent_node())
+    
     # Nœuds de réponse selon la complexité
     graph.add_node("simple_response", generate_simple_response)
     graph.add_node("assess_rag_need", assess_rag_need)
@@ -47,11 +52,13 @@ def create_character_graph() -> StateGraph:
     graph.add_node("finalize", finalize_interaction)
     
     # === DÉFINITION DU POINT D'ENTRÉE ===
-    graph.set_entry_point("perceive")
+    graph.set_entry_point("interpret_input")
     
     # === DÉFINITION DES FLUX ===
     
     # Depuis la perception, routage selon la complexité
+    graph.add_edge("interpret_input","decide_intent")
+    graph.add_edge("decide_intent","perceive")
     graph.add_conditional_edges(
         "perceive",
         route_by_complexity,
@@ -143,7 +150,6 @@ class CharacterGraphManager:
         self.compiled_main = self.main_graph.compile()
         self.compiled_simple = self.simple_graph.compile()
 
-    @traceable
     async def process_message(
         self, 
         user_message: str, 
@@ -182,7 +188,6 @@ class CharacterGraphManager:
         
         return result
     
-    @traceable
     def _build_initial_state(self, user_message: str, character_data: dict) -> CharacterState:
         """Construit l'état initial pour le graphe."""
         
@@ -193,13 +198,11 @@ class CharacterGraphManager:
             
             # Analyse (sera remplie par le graphe)
             parsed_message=None,
-            message_intent=None
+            message_intent=None,
             
             # Personnage
             character_name=character_data.get("name", "unknown"),
-            personality_traits=character_data.get("personality", {}),
-            current_emotion=character_data.get("current_emotion", "neutral"),
-            character_knowledge=character_data.get("knowledge", []),
+            character_data=character_data,
             
             # Conversation
             conversation_history=character_data.get("conversation_history", []),
@@ -212,13 +215,17 @@ class CharacterGraphManager:
             relevant_knowledge=[],
             
             # Actions
-            input_trigger_probs=character_data.get("triggers")
-            
+            trigger_probs=character_data.get("triggers"),
+            # planned_actions=[],
+            # triggered_events=[],
+            # game_state_changes={},
+
             # Métadonnées
             processing_start_time=0.0,
             processing_steps=[],
             debug_info={}
         )
+    
     # def _build_initial_state(self, user_message: str, character_data: dict) -> CharacterState:
     #     """Construit l'état initial pour le graphe."""
         
@@ -302,3 +309,7 @@ perceive → [complexity_router]
    ├─ rag_search → generate_response → [memory_router] → finalize/memory_update → END  
    └─ generate_response → [memory_router] → finalize/memory_update → END
             """
+        
+if __name__ == "__main__":
+    graph = CharacterGraphManager()
+# display(Image(graph.compiled_main.get_graph().draw_mermaid_png()))

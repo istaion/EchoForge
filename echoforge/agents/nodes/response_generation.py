@@ -20,9 +20,9 @@ def generate_simple_response(state: CharacterState) -> CharacterState:
     state["processing_steps"].append("simple_response_generation")
     
     character_name = state["character_name"]
-    personality = state["personality_traits"]
+    personality = state["character_data"]["personality"]
     intent = state["message_intent"]
-    emotion = state["current_emotion"]
+    emotion = state["character_data"]["current_emotion"]
     
     # Génération de réponse simple selon l'intention
     response = _generate_personality_response(
@@ -127,8 +127,8 @@ def _build_comprehensive_prompt(state: CharacterState) -> str:
     
     # Récupération des données
     character_name = state["character_name"]
-    personality = state.get("personality_traits", {})
-    emotion = state["current_emotion"]
+    personality = state["character_data"]["personality"]
+    emotion = state["character_data"]["current_emotion"]
     user_message = state["user_message"]
     rag_results = state["rag_results"]
     conversation_history = state.get("conversation_history", [])

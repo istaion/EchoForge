@@ -47,6 +47,9 @@ class EchoForgeConfig(BaseSettings):
     langsmith_endpoint: str = Field(default="https://api.smith.langchain.com", description="Endpoint LangSmith")
     langsmith_api_key: Optional[str] = Field(default=None, description="Clé API LangSmith")
     langsmith_project: str = Field(default="echoforge-dev", description="Nom du projet LangSmith")
+
+    # debug:
+    debug: bool = Field(default=False, description="Activer le debug")
     
     # Interface
     gradio_server_name: str = Field(default="0.0.0.0", description="Nom du serveur Gradio")
@@ -71,7 +74,7 @@ class EchoForgeConfig(BaseSettings):
     def _setup_langsmith(self):
         """Configure les variables d'environnement LangSmith"""
         if self.langsmith_tracing:
-            os.environ["LANGCHAIN_TRACING_V2"] = "false"
+            os.environ["LANGCHAIN_TRACING_V2"] = str(self.langsmith_tracing).lower()
             os.environ["LANGCHAIN_ENDPOINT"] = self.langsmith_endpoint
             os.environ["LANGCHAIN_PROJECT"] = self.langsmith_project
             

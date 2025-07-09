@@ -43,6 +43,7 @@
         "output": {
             "give_gold": {
                 "trigger":"Martine donne ou prète X pièce d'or au joueur", 
+                "threshold":0.9, 
                 "output":"give_money_trigger_probs=...", 
                 "value_key": "X (défault = 5)"
             }
