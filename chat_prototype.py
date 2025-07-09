@@ -104,10 +104,12 @@ class EchoForgeAgentWrapper:
             if os.getenv('ECHOFORGE_DEBUG', 'false').lower() == 'true':
                 debug_info = result.get('debug_info', {})
                 complexity = result.get('complexity_level', 'unknown')
+                input_prob = result.get('input_trigger_probs')
+                output_prob = result.get('output_trigger_probs')
                 rag_used = bool(result.get('rag_results', []))
                 processing_time = debug_info.get('final_stats', {}).get('total_processing_time', 0)
                 
-                response += f"\n\n🐛 Debug: {complexity} | RAG: {rag_used} | {processing_time:.3f}s"
+                response += f"\n\n🐛 Debug: {complexity} | RAG: {rag_used} | {processing_time:.3f}s \n input_probs : {input_prob} \n output_probs : {output_prob}"
             
             return response
             

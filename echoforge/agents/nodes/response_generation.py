@@ -127,18 +127,30 @@ def _build_comprehensive_prompt(state: CharacterState) -> str:
     
     # Récupération des données
     character_name = state["character_name"]
-    personality = state["character_data"]["personality"]
-    emotion = state["character_data"]["current_emotion"]
+    personality = state["character_data"].get("personality")
+    emotion = state["character_data"].get("current_emotion")
+    user_relation = state["character_data"].get("relation")
     user_message = state["user_message"]
     rag_results = state["rag_results"]
     conversation_history = state.get("conversation_history", [])
+    all_triggers = state["character_data"].get("triggers", {}).get("input", {})
+    activated = state.get("activated_input_triggers", []) or []
+    refused = [t for t in all_triggers.keys() if t not in activated]
+    
+    # Format des intentions activées
+    def format_trigger_list(trigger_names):
+        return "\n".join([
+            f"- {trigger}: {all_triggers[trigger].get('trigger')} → effet attendu : {all_triggers[trigger].get('effect')}"
+            for trigger in trigger_names if trigger in all_triggers
+        ]) or "Aucune"
     
     # Construction des sections du prompt
     
     # 1. Identité du personnage
     identity_section = f"""Tu es {character_name}.
 PERSONNALITÉ: {_format_personality(personality)}
-ÉMOTION ACTUELLE: {emotion}"""
+ÉMOTION ACTUELLE: {emotion}
+NIVEAU RELATION AVEC LE PERSONNAGE JOUEUR (entre -10 et 10) : {user_relation}"""
 
     # 2. Contexte RAG si disponible
     context_section = ""
@@ -167,7 +179,17 @@ CONNAISSANCES PERTINENTES:
 HISTORIQUE RÉCENT:
 {chr(10).join(history_items)}"""
 
-    # 4. Instructions spécifiques
+    # === 4. Section sur les intentions détectées ===
+    intent_section = f"""
+INTENTIONS DÉTECTÉES DANS LE MESSAGE DU JOUEUR :
+- Intentions activées :
+{format_trigger_list(activated)}
+
+- Intentions non activées (refusées ou ignorées) :
+{format_trigger_list(refused)}
+"""
+
+    # 5. Instructions spécifiques
     instructions_section = f"""
 MESSAGE ACTUEL DE L'UTILISATEUR: "{user_message}"
 
@@ -176,15 +198,14 @@ INSTRUCTIONS:
 2. Utilise ta personnalité et ton émotion actuelle ({emotion})
 3. Si tu as des connaissances pertinentes ci-dessus, intègre-les naturellement
 4. Tiens compte de l'historique de conversation pour la cohérence
-5. Garde ta réponse courte et naturelle (2-3 phrases maximum)
-6. Si tu fais des actions physiques, mets-les entre *astérisques*
-7. Réponds en français de manière authentique à ton personnage
+5. Si tu fais des actions physiques, mets-les entre *astérisques*
+6. Réponds en français de manière authentique à ton personnage
 
 RÉPONSE:"""
 
-    # Assemblage final
+    # === Assemblage final ===
     full_prompt = f"""{identity_section}{context_section}{history_section}
-
+{intent_section}
 {instructions_section}"""
     
     return full_prompt

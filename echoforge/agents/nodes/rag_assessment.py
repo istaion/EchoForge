@@ -29,7 +29,7 @@ def assess_rag_need(state: CharacterState) -> CharacterState:
     
     # Mise à jour de l'état
     state["needs_rag_search"] = rag_analysis["needs_rag"]
-    state["rag_query"] = rag_analysis["query"]
+    state["rag_query"] = [rag_analysis["query"]]
     
     # Debug info
     state["debug_info"]["rag_assessment"] = rag_analysis
@@ -130,6 +130,49 @@ RÉPONSE:"""
         # Fallback sur analyse basique
         return _fallback_keyword_analysis(message, intent)
 
+def validate_rag_results(state: CharacterState) -> CharacterState:
+    """
+    Vérifie si les résultats RAG sont suffisamment pertinents pour continuer.
+    Marque si une nouvelle recherche est nécessaire.
+    """
+    state["processing_steps"].append("rag_validation")
+    if len(state["rag_query"]) >= 3:  # 1 original + 2 reformulations
+        state["needs_rag_retry"] = False
+        state["rag_retry_reason"] = "Nombre maximum de tentatives RAG atteint"
+        state["relevant_knowledge"] = _select_best_knowledge_for_generation(state)
+    else:
+        results = state.get("rag_results", [])
+        top_score = results[0]["relevance"] if results else 0.0
+        min_acceptable_score = 0.6  # ← configurable
+
+        if top_score < min_acceptable_score:
+            # Pas assez d'infos utiles : nouvelle tentative ?
+            state["debug_info"]["rag_validation"] = {
+                "status": "insufficient_information",
+                "top_score": top_score
+            }
+            state["needs_rag_retry"] = True
+            state["rag_retry_reason"] = (
+                "Les connaissances récupérées sont trop peu pertinentes "
+                f"(score max = {top_score:.2f} < seuil {min_acceptable_score})."
+            )
+        else:
+            state["debug_info"]["rag_validation"] = {
+                "status": "ok",
+                "top_score": top_score
+            }
+            state["needs_rag_retry"] = False
+            state["rag_retry_reason"] = None
+
+    return state
+
+def _select_best_knowledge_for_generation(state: CharacterState, top_k: int = 5) -> List[str]:
+    """
+    Sélectionne les contenus RAG les plus pertinents pour la génération finale.
+    """
+    all_results = state.get("rag_results", [])
+    selected = sorted(all_results, key=lambda x: x["relevance"], reverse=True)[:top_k]
+    return [r["content"] for r in selected]
 
 def _fallback_keyword_analysis(message: str, intent: str) -> Dict[str, Any]:
     """Analyse de fallback basée sur des mots-clés."""
@@ -195,7 +238,7 @@ def _fallback_keyword_analysis(message: str, intent: str) -> Dict[str, Any]:
             if len(word) > 3 and word.lower() not in ["dans", "avec", "pour", "que", "qui"]:
                 important_words.append(word.lower())
         
-        query = " ".join(set(important_words))[:100]  # Limite la longueur
+        query = " ".join(set(important_words))[:200]  # Limite la longueur
     
     return {
         "needs_rag": needs_rag,

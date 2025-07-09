@@ -49,6 +49,25 @@ def route_by_rag_need(state: CharacterState) -> str:
     else:
         return "generate_response"
 
+def check_if_needs_new_rag(state: CharacterState) -> str:
+    """
+    Route selon le besoin d'une nouvelle recherche RAG.
+    
+    Args:
+        state: État actuel du personnage
+        
+    Returns:
+        Nom du prochain nœud à exécuter
+    """
+    needs_rag_retry = state["needs_rag_retry"]
+    
+    # Ajout d'informations de debug
+    state["processing_steps"].append(f"rag_routing_{'retry' if needs_rag_retry else 'end'}")
+    
+    if needs_rag_retry:
+        return "rag_retry"
+    else:
+        return "generate_response"
 
 def check_if_needs_memory_update(state: CharacterState) -> str:
     """

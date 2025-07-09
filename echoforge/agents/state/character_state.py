@@ -20,9 +20,6 @@ class CharacterState(TypedDict):
     # === CONTEXTE PERSONNAGE ===
     character_name: str
     character_data: Dict[str, Any]
-    # personality_traits: Dict[str, Any]
-    # current_emotion: str
-    # character_knowledge: List[str]
     
     # === CONTEXTE CONVERSATIONNEL ===
     conversation_history: List[Dict[str, str]]
@@ -31,12 +28,14 @@ class CharacterState(TypedDict):
     # === RAG ET CONNAISSANCES ===
     needs_rag_search: bool
     rag_query: Optional[str]
-    rag_results: List[Dict[str, Any]]
-    relevant_knowledge: List[str]
+    rag_results: List[Any]
+    relevant_knowledge: List[Any]
     
     # === ACTIONS ET DÉCLENCHEURS ===
     input_trigger_probs: Optional[Dict[str, float]]
     activated_input_triggers: Optional[List[str]]
+    refused_input_triggers: Optional[List[str]]
+    output_trigger_probs:Optional[Dict[str, float]]
     
     # === MÉTADONNÉES ===
     processing_start_time: float

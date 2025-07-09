@@ -2,8 +2,8 @@
 
 from langgraph.graph import StateGraph, END
 from echoforge.agents.state.character_state import CharacterState
-from echoforge.agents.nodes.perception import perceive_input, interpret_player_input_node, decide_intent_node
-from echoforge.agents.nodes.rag_assessment import assess_rag_need
+from echoforge.agents.nodes.perception import perceive_input, interpret_player_input_node, decide_intent_node, interpret_character_output
+from echoforge.agents.nodes.rag_assessment import assess_rag_need, validate_rag_results
 from echoforge.agents.nodes.rag_search import perform_rag_search
 from echoforge.agents.nodes.response_generation import generate_simple_response, generate_response
 from echoforge.agents.nodes.memory_update import update_character_memory, finalize_interaction
@@ -11,7 +11,8 @@ from langsmith import traceable
 from echoforge.agents.conditions.complexity_router import (
     route_by_complexity, 
     route_by_rag_need, 
-    check_if_needs_memory_update
+    check_if_needs_memory_update,
+    check_if_needs_new_rag
 )
 from echoforge.core.llm_providers import LLMManager
 from echoforge.utils.config import get_config
@@ -45,9 +46,11 @@ def create_character_graph() -> StateGraph:
     graph.add_node("simple_response", generate_simple_response)
     graph.add_node("assess_rag_need", assess_rag_need)
     graph.add_node("rag_search", perform_rag_search)
+    graph.add_node("validate_rag_results",validate_rag_results)
     graph.add_node("generate_response", generate_response)
     
     # Nœuds de finalisation
+    graph.add_node("interpret_output",interpret_character_output(llm_manager=LLMManager()))
     graph.add_node("memory_update", update_character_memory)
     graph.add_node("finalize", finalize_interaction)
     
@@ -79,23 +82,23 @@ def create_character_graph() -> StateGraph:
     )
     
     # Depuis la recherche RAG, vers la génération de réponse
-    graph.add_edge("rag_search", "generate_response")
-    
-    # Depuis les réponses, routage vers mémoire ou finalisation
+    graph.add_edge("rag_search", "validate_rag_results")
     graph.add_conditional_edges(
-        "simple_response",
-        check_if_needs_memory_update,
+        "validate_rag_results",
+        check_if_needs_new_rag,
         {
-            "memory_update": "memory_update",
-            "finalize": "finalize"
+            "rag_retry": "rag_search",
         }
     )
     
+    # Depuis les réponses, routage vers mémoire ou finalisation
+    graph.add_edge("simple_response","interpret_output")
+    graph.add_edge("generate_response","interpret_output")
     graph.add_conditional_edges(
-        "generate_response",
+        "interpret_output",
         check_if_needs_memory_update,
         {
-            "memory_update": "memory_update", 
+            "memory_update": "memory_update",
             "finalize": "finalize"
         }
     )
