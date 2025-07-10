@@ -11,22 +11,22 @@
       "triggers": ["cuisine", "mère", "recettes", "tradition", "volcanique"]
     },
     {
-      "id": "exploring_with_fathira",
+      "id": "exploring_with_martine",
       "period": "enfance",
       "age_range": "10 ans",
-      "memory": "Explorait les grottes avec Fathira. Elles ont trouvé des inscriptions anciennes et juré de garder le secret.",
+      "memory": "Explorait les grottes avec martine. Elles ont trouvé des inscriptions anciennes et juré de garder le secret.",
       "emotion": "complicité_mystère",
       "importance": "very_high",
-      "triggers": ["grottes", "fathira", "secret", "exploration", "trésor"]
+      "triggers": ["grottes", "martine", "secret", "exploration", "trésor"]
     },
     {
       "id": "election_feast",
       "period": "adulte",
       "age_range": "28 ans",
-      "memory": "Organisa le banquet pour la victoire de Fathira aux élections. L’un des moments les plus joyeux de sa vie.",
+      "memory": "Organisa le banquet pour la victoire de martine aux élections. L’un des moments les plus joyeux de sa vie.",
       "emotion": "fierté_joie",
       "importance": "high",
-      "triggers": ["fête", "fathira", "banquet", "victoire", "cuisine"]
+      "triggers": ["fête", "martine", "banquet", "victoire", "cuisine"]
     },
     {
       "id": "cookies_festival",
@@ -49,8 +49,8 @@
   ],
   "memory_patterns": {
     "dominant_themes": ["nourrir", "protéger", "histoire locale"],
-    "key_relationships": ["fathira", "habitants", "traditions"],
-    "formative_events": ["exploration_grottes", "victoire_fathira"],
-    "emotional_anchors": ["cuisine_famille", "complicité_fathira", "partage_communautaire"]
+    "key_relationships": ["martine", "habitants", "traditions"],
+    "formative_events": ["exploration_grottes", "victoire_martine"],
+    "emotional_anchors": ["cuisine_famille", "complicité_martine", "partage_communautaire"]
   }
 }

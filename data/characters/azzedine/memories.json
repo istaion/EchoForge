@@ -5,10 +5,10 @@
       "id": "arrival_island",
       "period": "adulte",
       "age_range": "30 ans",
-      "memory": "Arrivée mouvementée sur l'île de Sérénité. Critique ouverte de l'esthétique portuaire, causant une première tension avec Fathira.",
+      "memory": "Arrivée mouvementée sur l'île de Sérénité. Critique ouverte de l'esthétique portuaire, causant une première tension avec martine.",
       "emotion": "frustration_exigence",
       "importance": "medium",
-      "triggers": ["port", "fathira", "arrivée", "critique", "ambition"]
+      "triggers": ["port", "martine", "arrivée", "critique", "ambition"]
     },
     {
       "id": "festival_costumes",
@@ -49,7 +49,7 @@
   ],
   "memory_patterns": {
     "dominant_themes": ["esthétique", "perfection", "mystère du textile"],
-    "key_relationships": ["fathira", "clients_île", "mère"],
+    "key_relationships": ["martine", "clients_île", "mère"],
     "formative_events": ["arrivée_île", "festival_costumes"],
     "emotional_anchors": ["besoin_reconnaissance", "quête_perfection", "attachement_maternel"]
   }

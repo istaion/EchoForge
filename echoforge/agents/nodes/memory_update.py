@@ -1,10 +1,11 @@
-"""Nœud de mise à jour de la mémoire du personnage."""
-
 import time
 from typing import Dict, Any
 from ..state.character_state import CharacterState
+from langsmith import traceable
+from echoforge.utils.config import get_config
 
-
+config = get_config()
+@traceable
 def update_character_memory(state: CharacterState) -> CharacterState:
     """
     Met à jour la mémoire du personnage avec l'interaction actuelle.
@@ -64,10 +65,9 @@ def _create_memory_entry(state: CharacterState) -> Dict[str, Any]:
         "key_concepts": key_concepts,
         "metadata": {
             "intent": state["message_intent"],
-            "complexity": state["complexity_level"],
             "used_rag": bool(state["rag_results"]),
             "processing_steps": state["processing_steps"],
-            "character_emotion": state["current_emotion"]
+            "character_emotion": state['character_data']["current_emotion"]
         }
     }
     
@@ -79,11 +79,11 @@ def _calculate_importance(state: CharacterState) -> float:
     
     importance = 0.3  # Base
     
-    # Bonus selon la complexité
-    if state["complexity_level"] == "complex":
-        importance += 0.3
-    elif state["complexity_level"] == "medium":
-        importance += 0.1
+    # # Bonus selon la complexité
+    # if state["complexity_level"] == "complex":
+    #     importance += 0.3
+    # elif state["complexity_level"] == "medium":
+    #     importance += 0.1
     
     # Bonus si RAG utilisé (information importante partagée)
     if state["rag_results"]:
@@ -99,9 +99,9 @@ def _calculate_importance(state: CharacterState) -> float:
     if word_count > 10:
         importance += 0.1
     
-    # Bonus si actions planifiées
-    if state["planned_actions"]:
-        importance += 0.2
+    # # Bonus si actions planifiées
+    # if state["planned_actions"]:
+    #     importance += 0.2
     
     return min(importance, 1.0)
 
@@ -200,8 +200,7 @@ def finalize_interaction(state: CharacterState) -> CharacterState:
         "total_processing_time": processing_time,
         "steps_count": len(state["processing_steps"]),
         "rag_used": bool(state["rag_results"]),
-        "response_length": len(state["response"]),
-        "complexity_route": state["complexity_level"]
+        "response_length": len(state["response"])
     }
     
     # Nettoyage des données temporaires si nécessaire

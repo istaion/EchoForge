@@ -1,18 +1,23 @@
 """Graphe principal pour les personnages EchoForge utilisant LangGraph."""
 
-from langgraph import StateGraph, END
-from ..state.character_state import CharacterState
-from ..nodes.perception import perceive_input
-from ..nodes.rag_assessment import assess_rag_need
-from ..nodes.rag_search import perform_rag_search
-from ..nodes.response_generation import generate_simple_response, generate_response
-from ..nodes.memory_update import update_character_memory, finalize_interaction
-from ..conditions.complexity_router import (
+from langgraph.graph import StateGraph, END
+from echoforge.agents.state.character_state import CharacterState
+from echoforge.agents.nodes.perception import perceive_input, interpret_player_input_node, decide_intent_node, interpret_character_output
+from echoforge.agents.nodes.rag_assessment import assess_rag_need, validate_rag_results
+from echoforge.agents.nodes.rag_search import perform_rag_search
+from echoforge.agents.nodes.response_generation import generate_simple_response, generate_response
+from echoforge.agents.nodes.memory_update import update_character_memory, finalize_interaction
+from langsmith import traceable
+from echoforge.agents.conditions.complexity_router import (
     route_by_complexity, 
     route_by_rag_need, 
-    check_if_needs_memory_update
+    check_if_needs_memory_update,
+    check_if_needs_new_rag
 )
+from echoforge.core.llm_providers import LLMManager
+from echoforge.utils.config import get_config
 
+config = get_config()
 
 def create_character_graph() -> StateGraph:
     """
@@ -33,22 +38,30 @@ def create_character_graph() -> StateGraph:
     # Nœud d'entrée : perception et analyse du message
     graph.add_node("perceive", perceive_input)
     
+    # Analyse des triggers :
+    graph.add_node("interpret_input", interpret_player_input_node(llm_manager=LLMManager()))
+    graph.add_node("decide_intent", decide_intent_node())
+    
     # Nœuds de réponse selon la complexité
     graph.add_node("simple_response", generate_simple_response)
     graph.add_node("assess_rag_need", assess_rag_need)
-    graph.add_node("rag_search", perform_rag_search)
+    graph.add_node("rag_search", perform_rag_search(llm_manager=LLMManager()))
+    graph.add_node("validate_rag_results",validate_rag_results)
     graph.add_node("generate_response", generate_response)
     
     # Nœuds de finalisation
+    graph.add_node("interpret_output",interpret_character_output(llm_manager=LLMManager()))
     graph.add_node("memory_update", update_character_memory)
     graph.add_node("finalize", finalize_interaction)
     
     # === DÉFINITION DU POINT D'ENTRÉE ===
-    graph.set_entry_point("perceive")
+    graph.set_entry_point("interpret_input")
     
     # === DÉFINITION DES FLUX ===
     
     # Depuis la perception, routage selon la complexité
+    graph.add_edge("interpret_input","decide_intent")
+    graph.add_edge("decide_intent","perceive")
     graph.add_conditional_edges(
         "perceive",
         route_by_complexity,
@@ -69,23 +82,24 @@ def create_character_graph() -> StateGraph:
     )
     
     # Depuis la recherche RAG, vers la génération de réponse
-    graph.add_edge("rag_search", "generate_response")
-    
-    # Depuis les réponses, routage vers mémoire ou finalisation
+    graph.add_edge("rag_search", "validate_rag_results")
     graph.add_conditional_edges(
-        "simple_response",
-        check_if_needs_memory_update,
+        "validate_rag_results",
+        check_if_needs_new_rag,
         {
-            "memory_update": "memory_update",
-            "finalize": "finalize"
+            "rag_retry": "rag_search",
+            "generate_response": "generate_response"
         }
     )
     
+    # Depuis les réponses, routage vers mémoire ou finalisation
+    graph.add_edge("simple_response","interpret_output")
+    graph.add_edge("generate_response","interpret_output")
     graph.add_conditional_edges(
-        "generate_response",
+        "interpret_output",
         check_if_needs_memory_update,
         {
-            "memory_update": "memory_update", 
+            "memory_update": "memory_update",
             "finalize": "finalize"
         }
     )
@@ -139,7 +153,7 @@ class CharacterGraphManager:
         self.simple_graph = create_simple_chat_graph()
         self.compiled_main = self.main_graph.compile()
         self.compiled_simple = self.simple_graph.compile()
-    
+
     async def process_message(
         self, 
         user_message: str, 
@@ -189,13 +203,10 @@ class CharacterGraphManager:
             # Analyse (sera remplie par le graphe)
             parsed_message=None,
             message_intent=None,
-            complexity_level="medium",
             
             # Personnage
             character_name=character_data.get("name", "unknown"),
-            personality_traits=character_data.get("personality", {}),
-            current_emotion=character_data.get("current_emotion", "neutral"),
-            character_knowledge=character_data.get("knowledge", []),
+            character_data=character_data,
             
             # Conversation
             conversation_history=character_data.get("conversation_history", []),
@@ -208,25 +219,62 @@ class CharacterGraphManager:
             relevant_knowledge=[],
             
             # Actions
-            planned_actions=[],
-            triggered_events=[],
-            game_state_changes={},
-            
+            trigger_probs=character_data.get("triggers"),
+            # planned_actions=[],
+            # triggered_events=[],
+            # game_state_changes={},
+
             # Métadonnées
             processing_start_time=0.0,
             processing_steps=[],
             debug_info={}
         )
     
+    # def _build_initial_state(self, user_message: str, character_data: dict) -> CharacterState:
+    #     """Construit l'état initial pour le graphe."""
+        
+    #     return CharacterState(
+    #         # Input
+    #         user_message=user_message,
+    #         response="",
+            
+    #         # Analyse (sera remplie par le graphe)
+    #         parsed_message=None,
+    #         message_intent=None,
+    #         complexity_level="medium",
+            
+    #         # Personnage
+    #         character_name=character_data.get("name", "unknown"),
+    #         personality_traits=character_data.get("personality", {}),
+    #         current_emotion=character_data.get("current_emotion", "neutral"),
+    #         character_knowledge=character_data.get("knowledge", []),
+            
+    #         # Conversation
+    #         conversation_history=character_data.get("conversation_history", []),
+    #         context_summary=None,
+            
+    #         # RAG
+    #         needs_rag_search=False,
+    #         rag_query=None,
+    #         rag_results=[],
+    #         relevant_knowledge=[],
+            
+    #         # Actions
+    #         planned_actions=[],
+    #         triggered_events=[],
+    #         game_state_changes={},
+            
+    #         # Métadonnées
+    #         processing_start_time=0.0,
+    #         processing_steps=[],
+    #         debug_info={}
+    #     )
+    
     def _should_use_simple_graph(self, user_message: str) -> bool:
         """Détermine si le graphe simple doit être utilisé."""
         
         message_lower = user_message.lower().strip()
-        
-        # Messages très courts
-        if len(message_lower) < 10:
-            return True
-        
+
         # Patterns simples
         simple_patterns = [
             "bonjour", "salut", "hey", "hello",
@@ -235,7 +283,10 @@ class CharacterGraphManager:
             "oui", "non", "peut-être"
         ]
         
-        return any(pattern in message_lower for pattern in simple_patterns)
+        if len(message_lower) < 10 and any(pattern in message_lower for pattern in simple_patterns):
+            return True
+        
+        return False
     
     def get_graph_visualization(self, graph_type: str = "main") -> str:
         """
@@ -262,3 +313,7 @@ perceive → [complexity_router]
    ├─ rag_search → generate_response → [memory_router] → finalize/memory_update → END  
    └─ generate_response → [memory_router] → finalize/memory_update → END
             """
+        
+if __name__ == "__main__":
+    graph = CharacterGraphManager()
+# display(Image(graph.compiled_main.get_graph().draw_mermaid_png()))

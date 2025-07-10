@@ -21,8 +21,8 @@ class EchoForgeConfig(BaseSettings):
         default="paraphrase-multilingual:278m-mpnet-base-v2-fp16",
         description="Modèle d'embeddings"
     )
-    llm_model: str = Field(default="llama3.1:8b", description="Modèle LLM")
-    llm_provider: str = Field(default="ollama", description="Provider LLM (ollama, groq)")
+    llm_model: str = Field(default="llama-3.1-8b-instant", description="Modèle LLM, (ollama : llama3.1:8b, groq : llama-3.1-8b-instant)")
+    llm_provider: str = Field(default="groq", description="Provider LLM (ollama, groq)")
     
     # Configuration RAG
     chunk_size: int = Field(default=300, description="Taille des chunks généraux")
@@ -38,9 +38,18 @@ class EchoForgeConfig(BaseSettings):
     max_conversation_history: int = Field(default=10, description="Historique max de conversation")
     llm_temperature: float = Field(default=0.7, description="Température du LLM")
     
-    # API Keys (optionnel)
+    # API Keys
     groq_api_key: Optional[str] = Field(default=None, description="Clé API Groq")
     openai_api_key: Optional[str] = Field(default=None, description="Clé API OpenAI")
+    
+    # 🆕 LangSmith Configuration
+    langsmith_tracing: bool = Field(default=True, description="Activer le tracing LangSmith")
+    langsmith_endpoint: str = Field(default="https://api.smith.langchain.com", description="Endpoint LangSmith")
+    langsmith_api_key: Optional[str] = Field(default=None, description="Clé API LangSmith")
+    langsmith_project: str = Field(default="echoforge-dev", description="Nom du projet LangSmith")
+
+    # debug:
+    debug: bool = Field(default=False, description="Activer le debug")
     
     # Interface
     gradio_server_name: str = Field(default="0.0.0.0", description="Nom du serveur Gradio")
@@ -57,7 +66,45 @@ class EchoForgeConfig(BaseSettings):
         # Assure-toi que les chemins existent
         self.data_path.mkdir(exist_ok=True)
         self.vector_store_path.mkdir(exist_ok=True)
+        # 🆕 Configure les API keys depuis l'environnement si pas définies
+        self._setup_api_keys()
+        # 🆕 Configure LangSmith automatiquement
+        self._setup_langsmith()
     
+    def _setup_langsmith(self):
+        """Configure les variables d'environnement LangSmith"""
+        if self.langsmith_tracing:
+            os.environ["LANGCHAIN_TRACING_V2"] = str(self.langsmith_tracing).lower()
+            os.environ["LANGCHAIN_ENDPOINT"] = self.langsmith_endpoint
+            os.environ["LANGCHAIN_PROJECT"] = self.langsmith_project
+            
+            if self.langsmith_api_key:
+                os.environ["LANGCHAIN_API_KEY"] = self.langsmith_api_key
+
+    def _setup_api_keys(self):
+        """Configure les clés API depuis les variables d'environnement"""
+        # Groq API Key
+        if not self.groq_api_key:
+            self.groq_api_key = (
+                os.getenv("GROQ_API_KEY") or 
+                os.getenv("ECHOFORGE_GROQ_API_KEY")
+            )
+        
+        # OpenAI API Key  
+        if not self.openai_api_key:
+            self.openai_api_key = (
+                os.getenv("OPENAI_API_KEY") or 
+                os.getenv("ECHOFORGE_OPENAI_API_KEY")
+            )
+        
+        # LangSmith API Key
+        if not self.langsmith_api_key:
+            self.langsmith_api_key = (
+                os.getenv("LANGSMITH_API_KEY") or 
+                os.getenv("LANGCHAIN_API_KEY") or
+                os.getenv("ECHOFORGE_LANGSMITH_API_KEY")
+            )
+
     @classmethod
     def from_env_file(cls, env_file: str = ".env") -> "EchoForgeConfig":
         """Charge la configuration depuis un fichier .env"""
@@ -66,6 +113,19 @@ class EchoForgeConfig(BaseSettings):
     def to_dict(self) -> dict:
         """Convertit la configuration en dictionnaire"""
         return self.dict()
+    
+    def debug_info(self) -> str:
+        """Retourne des informations de debug sur la configuration"""
+        return f"""
+🔧 Configuration EchoForge:
+  - LLM Provider: {self.llm_provider}
+  - LLM Model: {self.llm_model}
+  - Temperature: {self.llm_temperature}
+  - Groq API Key: {'✅ Configurée' if self.groq_api_key else '❌ Manquante'}
+  - LangSmith: {'✅ Activé' if self.langsmith_tracing and self.langsmith_api_key else '❌ Désactivé'}
+  - Data Path: {self.data_path}
+  - Vector Store Path: {self.vector_store_path}
+        """.strip()
 
 
 # Instance globale de configuration
@@ -76,7 +136,7 @@ def get_config() -> EchoForgeConfig:
     """Récupère la configuration globale"""
     global _config
     if _config is None:
-        _config = EchoForgeConfig()
+        _config = EchoForgeConfig.from_env_file()
     return _config
 
 

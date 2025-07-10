@@ -10,7 +10,11 @@ from PIL import Image, ImageDraw
 import math
 import asyncio
 import time
+from langsmith import traceable
+from echoforge.utils.config import get_config
+import json
 
+config = get_config()
 # Import du système d'agents LangGraph
 try:
     from echoforge.agents.graphs.character_graph import CharacterGraphManager
@@ -40,102 +44,8 @@ else:
     ActionParsed = None
 
 # Données des personnages avec leurs positions sur la carte
-CHARACTERS = {
-    "fathira": {
-        "name": "Fathira",
-        "role": "Maire de l'île",
-        "personality": {
-            "traits": {
-                "leadership": 0.9,
-                "curiosity": 0.8,
-                "protectiveness": 0.9,
-                "formality": 0.7,
-                "generosity": 0.6
-            },
-            "speech_style": "Formel mais chaleureux, utilise 'citoyen' et 'notre communauté'",
-            "description": "Diplomatique, curieuse et protectrice de sa communauté"
-        },
-        "backstory": "Maire élue depuis 10 ans, garde les secrets de l'île et possède un trésor ancestral",
-        "current_emotion": "neutral",
-        "can_give_gold": True,
-        "special_knowledge": ["Histoire de l'île", "Localisation du trésor", "Relations entre habitants"],
-        "emoji": "👑",
-        "building": "Mairie (grande maison en haut)",
-        "position": {"x": 598, "y": 190},
-        "conversation_history": []
-    },
-    "claude": {
-        "name": "Claude",
-        "role": "Forgeron de l'île",
-        "personality": {
-            "traits": {
-                "pragmatism": 0.9,
-                "directness": 0.8,
-                "craftsmanship": 0.9,
-                "negotiation": 0.7,
-                "reliability": 0.8
-            },
-            "speech_style": "Franc, utilise du vocabulaire technique, parle de métal et d'outils",
-            "description": "Pragmatique, direct, passionné par son métier"
-        },
-        "backstory": "Forgeron depuis 20 ans, peut réparer n'importe quoi mais aime négocier",
-        "current_emotion": "neutral",
-        "wants_cookies": True,
-        "can_repair": True,
-        "special_knowledge": ["Métallurgie", "Réparation d'objets complexes", "Histoire des outils de l'île"],
-        "emoji": "🔨",
-        "building": "Forge (maison à gauche)",
-        "position": {"x": 300, "y": 400},
-        "conversation_history": []
-    },
-    "azzedine": {
-        "name": "Azzedine",
-        "role": "Styliste de l'île",
-        "personality": {
-            "traits": {
-                "creativity": 0.9,
-                "perfectionism": 0.8,
-                "aesthetics": 0.9,
-                "moodiness": 0.6,
-                "pride": 0.7
-            },
-            "speech_style": "Artistique, utilise des métaphores, parle de beauté et d'esthétique",
-            "description": "Créatif, perfectionniste, parfois capricieux"
-        },
-        "backstory": "Styliste talentueux, vend des tissus rares mais exigeant sur la qualité",
-        "current_emotion": "neutral",
-        "sells_fabric": True,
-        "special_knowledge": ["Tissus et matériaux", "Tendances artistiques", "Secrets de confection"],
-        "emoji": "✂️",
-        "building": "Atelier de couture (maison colorée à droite)",
-        "position": {"x": 820, "y": 580},
-        "conversation_history": []
-    },
-    "roberte": {
-        "name": "Roberte",
-        "role": "Cuisinière de l'île",
-        "personality": {
-            "traits": {
-                "generosity": 0.8,
-                "territoriality": 0.7,
-                "perfectionism": 0.8,
-                "warmth": 0.8,
-                "scheduling": 0.9
-            },
-            "speech_style": "Maternel, parle de recettes et d'ingrédients, utilise des expressions culinaires",
-            "description": "Généreuse mais territoriale, perfectionniste en cuisine"
-        },
-        "backstory": "Cuisinière réputée, déteste être dérangée pendant son travail mais offre volontiers des cookies en pause",
-        "current_emotion": "neutral",
-        "gives_cookies": True,
-        "cooking_schedule": "Cuisine le matin (8h-12h), pause l'après-midi (14h-16h)",
-        "special_knowledge": ["Recettes ancestrales", "Ingrédients de l'île", "Habitudes alimentaires des habitants"],
-        "emoji": "👩‍🍳",
-        "building": "Auberge (maison avec terrasse au centre)",
-        "position": {"x": 590, "y": 480},
-        "conversation_history": []
-    }
-}
+with open("data/game_data/characters.json", "r") as f:
+    CHARACTERS = json.load(f)
 
 # Position de la montgolfière
 BALLOON_POSITION = {"x": 120, "y": 120}
@@ -194,10 +104,12 @@ class EchoForgeAgentWrapper:
             if os.getenv('ECHOFORGE_DEBUG', 'false').lower() == 'true':
                 debug_info = result.get('debug_info', {})
                 complexity = result.get('complexity_level', 'unknown')
+                input_prob = result.get('input_trigger_probs')
+                output_prob = result.get('output_trigger_probs')
                 rag_used = bool(result.get('rag_results', []))
                 processing_time = debug_info.get('final_stats', {}).get('total_processing_time', 0)
                 
-                response += f"\n\n🐛 Debug: {complexity} | RAG: {rag_used} | {processing_time:.3f}s"
+                response += f"\n\n🐛 Debug: {complexity} | RAG: {rag_used} | {processing_time:.3f}s \n input_probs : {input_prob} \n output_probs : {output_prob}"
             
             return response
             
@@ -212,7 +124,7 @@ class EchoForgeAgentWrapper:
         response_lower = result['response'].lower()
         
         # Actions spécifiques par personnage
-        if character_key == "fathira" and character_data.get("can_give_gold"):
+        if character_key == "martine" and character_data.get("can_give_gold"):
             if self._detect_give_action(response_lower, "or"):
                 await self._give_gold()
         
@@ -264,7 +176,7 @@ class EchoForgeAgentWrapper:
         """Donne de l'or au joueur."""
         if game_state["player_gold"] < 100:
             game_state["player_gold"] += 10
-            print(f"💰 Fathira vous a donné 10 pièces d'or! Total: {game_state['player_gold']}")
+            print(f"💰 martine vous a donné 10 pièces d'or! Total: {game_state['player_gold']}")
     
     async def _give_cookies(self):
         """Donne des cookies au joueur."""
@@ -320,7 +232,8 @@ class RAGSystemWrapper:
             if not char_store_path.exists():
                 print(f"👤 Construction du vector store pour {character_id}...")
                 self.rag_system.build_character_vectorstore(character_id)
-    
+
+    @traceable
     async def get_character_response(self, character_key: str, user_message: str) -> str:
         """Obtient une réponse via le système RAG."""
         if not self.initialized:
@@ -385,11 +298,11 @@ class RAGSystemWrapper:
         response_lower = character_response.lower()
         
         # Même logique que le système d'agents mais synchrone
-        if character_key == "fathira" and character_data.get("can_give_gold"):
+        if character_key == "martine" and character_data.get("can_give_gold"):
             if any(word in response_lower for word in ["donne", "offre", "voici", "prends"]) and "or" in response_lower:
                 if game_state["player_gold"] < 100:
                     game_state["player_gold"] += 10
-                    print(f"💰 Fathira vous a donné 10 pièces d'or!")
+                    print(f"💰 martine vous a donné 10 pièces d'or!")
         
         # Autres actions similaires...
 
@@ -710,9 +623,9 @@ def create_interface():
                 personality_info = f"""
                 ## 👥 Personnages IA
                 
-                **👑 Fathira** - Maire  
+                **👑 martine** - Maire  
                 *Donne de l'or, connaît les secrets*  
-                Traits: Leadership {CHARACTERS['fathira']['personality']['traits']['leadership']}, Curiosité {CHARACTERS['fathira']['personality']['traits']['curiosity']}
+                Traits: Leadership {CHARACTERS['martine']['personality']['traits']['leadership']}, Curiosité {CHARACTERS['martine']['personality']['traits']['curiosity']}
                 
                 **🔨 Claude** - Forgeron  
                 *Répare la montgolfière contre des cookies*  

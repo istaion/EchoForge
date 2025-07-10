@@ -1,11 +1,11 @@
 {
   "character_id": "claude",
   "relationships": {
-    "fathira": {
-      "name": "Fathira la Maire",
+    "martine": {
+      "name": "martine la Maire",
       "relationship_type": "respect_mutuel",
       "trust_level": 8,
-      "history": "Fathira l’a aidé à s’installer sur l’île. Il lui est loyal depuis.",
+      "history": "martine l’a aidé à s’installer sur l’île. Il lui est loyal depuis.",
       "current_dynamic": "Relations solides et pragmatiques. Il répare ce qu’elle protège.",
       "shared_memories": [
         "Réparation du pont pendant la tempête",

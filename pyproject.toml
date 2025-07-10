@@ -1,17 +1,35 @@
 [project]
 name = "echoforge"
 version = "0.1.0"
-description = "Add your description here"
+description = "Framework d'agents conversationnels intelligents avec RAG"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "faiss-cpu>=1.11.0",
+    # Interface utilisateur
     "gradio>=5.35.0",
+    # LLM Providers
+    "ollama>=0.5.1",
+    # LangChain Stack
     "langchain>=0.3.26",
     "langchain-community>=0.3.26",
     "langchain-ollama>=0.3.3",
-    "langgraph>=0.5.1",
     "langsmith>=0.4.4",
+    # Vector stores et embeddings
+    "faiss-cpu>=1.11.0",
+    # Data processing
     "pydantic-settings>=2.10.1",
     "python-dotenv>=1.1.1",
+    # Notebooks
+    "ipykernel>=6.29.5",
+    "langgraph>=0.5.1",
+    "groq>=0.29.0",
+    "langchain-groq>=0.3.5",
 ]
+
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["echoforge"]

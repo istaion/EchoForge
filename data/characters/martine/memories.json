@@ -1,5 +1,5 @@
 {
-  "character_id": "fathira",
+  "character_id": "martine",
   "memories": [
     {
       "id": "childhood_caves",
@@ -32,7 +32,7 @@
       "id": "treasure_discovery",
       "period": "adolescence",
       "age_range": "16 ans",
-      "memory": "Découverte avec Roberte d'une partie du trésor ancestral dans les grottes. Elles ont promis de garder le secret jusqu'à ce que Fathira soit assez mature pour comprendre sa responsabilité.",
+      "memory": "Découverte avec Roberte d'une partie du trésor ancestral dans les grottes. Elles ont promis de garder le secret jusqu'à ce que Martine soit assez mature pour comprendre sa responsabilité.",
       "emotion": "émerveillement_responsabilité",
       "importance": "very_high",
       "triggers": ["trésor", "ancestral", "grottes", "roberte", "secret", "responsabilité"]

@@ -2,9 +2,13 @@
 
 from typing import List, Dict, Any
 from ..state.character_state import CharacterState
+from langsmith import traceable
+from echoforge.core import EchoForgeRAG
+from echoforge.utils.config import get_config
 
-
-def perform_rag_search(state: CharacterState) -> CharacterState:
+config = get_config()
+@traceable
+def perform_rag_search(llm_manager):
     """
     Effectue une recherche RAG basée sur la requête déterminée.
     
@@ -14,147 +18,112 @@ def perform_rag_search(state: CharacterState) -> CharacterState:
     Returns:
         État mis à jour avec les résultats RAG
     """
-    state["processing_steps"].append("rag_search")
-    
-    query = state["rag_query"]
-    character_name = state["character_name"]
-    
-    # Simulation d'une recherche RAG (à remplacer par ton système RAG)
-    rag_results = _simulate_rag_search(query, character_name)
-    
-    # Mise à jour de l'état
-    state["rag_results"] = rag_results
-    state["relevant_knowledge"] = [result["content"] for result in rag_results]
-    
-    # Debug info
-    state["debug_info"]["rag_search"] = {
-        "query": query,
-        "results_count": len(rag_results),
-        "top_relevance_score": rag_results[0]["relevance"] if rag_results else 0
-    }
-    
-    return state
+    def fn(state: CharacterState) -> CharacterState:
+        state["processing_steps"].append("rag_search")
+        query = state["rag_query"][-1]
 
-
-def _simulate_rag_search(query: str, character_name: str) -> List[Dict[str, Any]]:
-    """
-    Simulation d'une recherche RAG.
-    
-    TODO: Remplacer par l'intégration avec ton système RAG réel
-    """
-    
-    # Base de connaissances simulée par personnage
-    knowledge_base = {
-        "fathira": [
-            {
-                "content": "Fathira est maire de l'île depuis 10 ans. Elle connaît tous les secrets de l'île et possède un trésor ancestral.",
-                "metadata": {"type": "background", "importance": "high"},
-                "relevance": 0.9
-            },
-            {
-                "content": "L'île a une histoire mystérieuse. Elle était autrefois habitée par une ancienne civilisation qui a laissé des trésors cachés.",
-                "metadata": {"type": "history", "importance": "medium"},
-                "relevance": 0.8
-            },
-            {
-                "content": "Fathira entretient de bonnes relations avec tous les habitants de l'île. Elle est respectée pour sa sagesse.",
-                "metadata": {"type": "relationships", "importance": "medium"},
-                "relevance": 0.7
-            }
-        ],
-        "claude": [
-            {
-                "content": "Claude est forgeron depuis 20 ans. Il peut réparer n'importe quoi mais aime négocier pour ses services.",
-                "metadata": {"type": "background", "importance": "high"},
-                "relevance": 0.9
-            },
-            {
-                "content": "L'atelier de Claude contient des outils anciens et des secrets de métallurgie transmis de génération en génération.",
-                "metadata": {"type": "knowledge", "importance": "medium"},
-                "relevance": 0.8
-            }
-        ],
-        "azzedine": [
-            {
-                "content": "Azzedine est un styliste talentueux qui vend des tissus rares. Il est perfectionniste et exigeant sur la qualité.",
-                "metadata": {"type": "background", "importance": "high"},
-                "relevance": 0.9
-            }
-        ],
-        "roberte": [
-            {
-                "content": "Roberte est une cuisinière réputée. Elle déteste être dérangée pendant son travail mais offre volontiers des cookies en pause.",
-                "metadata": {"type": "background", "importance": "high"},
-                "relevance": 0.9
-            }
-        ]
-    }
-    
-    # Recherche basique par mots-clés
-    query_lower = query.lower()
-    results = []
-    
-    # Recherche dans la base du personnage spécifique
-    if character_name.lower() in knowledge_base:
-        character_knowledge = knowledge_base[character_name.lower()]
+        if state.get("needs_rag_retry"):
+            new_query = _reformulate_query_with_llm(state, previous_query=query, llm_manager=llm_manager)
+            if new_query:
+                state["rag_query"].append(new_query)
+                query = new_query
         
-        for item in character_knowledge:
-            # Score de pertinence basique
-            content_lower = item["content"].lower()
-            relevance_score = 0
-            
-            # Compte les mots de la requête présents dans le contenu
-            query_words = query_lower.split()
-            for word in query_words:
-                if len(word) > 2 and word in content_lower:
-                    relevance_score += 0.1
-            
-            # Ajoute le score de base
-            relevance_score += item["relevance"] * 0.5
-            
-            if relevance_score > 0.3:  # Seuil de pertinence
+        character_name = state["character_name"]
+        try:
+            rag_system = EchoForgeRAG(
+                    data_path=str(config.data_path),
+                    vector_store_path=str(config.vector_store_path),
+                    embedding_model=config.embedding_model,
+                    llm_model=config.llm_model
+                )
+            results = []
+
+            # Recherche dans les connaissances du monde
+            world_context = rag_system.retrieve_world_context(query, top_k=config.top_k_world)
+            for i, content in enumerate(world_context):
                 results.append({
-                    "content": item["content"],
-                    "metadata": item["metadata"],
-                    "relevance": min(relevance_score, 1.0),
+                    "content": content,
+                    "metadata": {"type": "world", "importance": "medium"},
+                    "relevance": max(0.8 - i * 0.1, 0.3),  # Score décroissant
+                    "source": "world_knowledge"
+                })
+            
+            # Recherche dans les connaissances du personnage
+            character_context = rag_system.retrieve_character_context(
+                query, character_name.lower(), top_k=config.top_k_character
+            )
+            for i, content in enumerate(character_context):
+                results.append({
+                    "content": content,
+                    "metadata": {"type": "character", "importance": "high"},
+                    "relevance": max(0.9 - i * 0.1, 0.4),  # Score plus élevé pour le personnage
                     "source": f"{character_name}_knowledge"
                 })
-    
-    # Recherche dans les connaissances générales de l'île
-    general_knowledge = [
-        {
-            "content": "L'île mystérieuse est un lieu magique où vivent quatre habitants principaux : Fathira la maire, Claude le forgeron, Azzedine le styliste et Roberte la cuisinière.",
-            "metadata": {"type": "general", "importance": "high"},
-            "relevance": 0.6
-        },
-        {
-            "content": "Les habitants de l'île ont développé un système d'échange basé sur l'or, les cookies et les services.",
-            "metadata": {"type": "economy", "importance": "medium"}, 
-            "relevance": 0.5
+            
+            # Trie par pertinence décroissante
+            results.sort(key=lambda x: x["relevance"], reverse=True)
+            
+        except ImportError as e:
+            print("⚠️ EchoForgeRAG non disponible, utilisation de la simulation")
+            return state
+        
+        except Exception as e:
+            print(f"⚠️ Erreur lors de la recherche RAG: {e}")
+            return state
+        
+        # Limite à 5 résultats maximum
+        rag_results = results[:5]
+        
+        # Mise à jour de l'état
+        state["rag_results"].extend(rag_results)
+        
+        # Debug info
+        state["debug_info"]["rag_search"] = {
+            "query": query,
+            "results_count": len(rag_results),
+            "top_relevance_score": rag_results[0]["relevance"] if rag_results else 0
         }
-    ]
-    
-    for item in general_knowledge:
-        content_lower = item["content"].lower()
-        relevance_score = 0
         
-        query_words = query_lower.split()
-        for word in query_words:
-            if len(word) > 2 and word in content_lower:
-                relevance_score += 0.1
-        
-        relevance_score += item["relevance"] * 0.3
-        
-        if relevance_score > 0.2:
-            results.append({
-                "content": item["content"],
-                "metadata": item["metadata"],
-                "relevance": min(relevance_score, 1.0),
-                "source": "general_knowledge"
-            })
+        return state
+    return fn
+
+def _reformulate_query_with_llm(state: CharacterState, previous_query: str, llm_manager) -> str:
+    """
+    Reformule une requête RAG plus efficace à partir du message utilisateur,
+    de l’intention, et du contexte de recherche précédent.
+    """
+    user_msg = state.get("parsed_message") or state.get("user_message", "")
+    intent = state.get("message_intent", "")
+    character_name = state.get("character_name", "le personnage")
+    rag_results = state.get("rag_results", [])
     
-    # Trie par pertinence décroissante
-    results.sort(key=lambda x: x["relevance"], reverse=True)
-    
-    # Limite à 3 résultats maximum
-    return results[:3]
+    previous_knowledge = "\n".join(
+        f"- {r['content']}" for r in rag_results[:3]
+    ) if rag_results else "Aucun résultat pertinent précédemment trouvé."
+
+    prompt = f"""
+Tu es un assistant expert en recherche de connaissances narratives pour un jeu de rôle.
+
+Le personnage s'appelle {character_name}.
+
+Le joueur a dit : "{user_msg}"
+Intention détectée : {intent}
+Ancienne requête utilisée : "{previous_query}"
+
+Voici les résultats précédemment trouvés :
+{previous_knowledge}
+
+Tu dois générer une nouvelle requête optimisée, plus précise, qui aiderait le personnage à trouver des informations pertinentes.
+
+Réponds uniquement par la requête reformulée, sans autre texte.
+Si aucune reformulation pertinente n'est possible, réponds exactement : NONE
+"""
+
+    try:
+        new_query = llm_manager.invoke(prompt).strip()
+        if new_query.upper() == "NONE":
+            return None
+        return new_query
+    except Exception as e:
+        state["debug_info"]["query_reformulation_error"] = str(e)
+        return None
