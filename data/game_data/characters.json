@@ -73,8 +73,47 @@
         "position": {"x": 300, "y": 400},
         "conversation_history": [],
         "relation": 6,
-        "input-driven": {"bye": "Le joueur dit au revoir"},
-        "output-driven": {}
+        "triggers": {
+        "input": {
+            "bye": {
+                "trigger":"Le joueur dit au revoir", 
+                "effect":"Martine dit au revoir. Fin de la conversation.", 
+                "threshold":0.8, 
+                "consequence_type":"dialogue_only", 
+                "output":"bye_trigger_probs=..."
+            }, 
+            "ask_for_money": {
+                "trigger":"Le joueur demande de l'argent", 
+                "threshold":0.6, 
+                "consequence_type":"dialogue_only", 
+                "conditions": "relation > 2", 
+                "effect": "Claude ne peux pas donner d'argent il n'en a pas.", 
+                "output":"ask_money_trigger_probs=..."
+            },
+            "ask_for_help": {
+                "trigger":"Le joueur demande à Claude s'il peut réparer le moteur de sa montgolfière.", 
+                "threshold":0.6, 
+                "consequence_type":"dialogue_only",  
+                "effect": "Claude dit qu'il peux réparer la mongolfière sans problème mais il a faim et n'aidera pas le joueur sauf si celui ci lui donne un cookie de Roberte.", 
+                "output":"ask_money_trigger_probs=..."
+            },
+            "gives_cookies": {
+                "trigger":"Le joueur donne un Cookie à Claude",
+                "threshold":0.6,
+                "consequence_type":"action",
+                "conditions": "le joueur possède un cookie",
+                "effect": "Claude annonce qu'il va réparer le moteur de la mongolfière"
+            }
+        },
+        "output": {
+            "fix_mongolfière": {
+                "trigger":"Claude annonce qu'il va réparer le moteur de la mongolfière", 
+                "threshold":0.8, 
+                "output":"give_money_trigger_probs=...", 
+                "value_key": "true or false"
+            }
+        }
+    }
     },
     "azzedine": {
         "name": "Azzedine",
@@ -98,8 +137,24 @@
         "building": "Atelier de couture (maison colorée à droite)",
         "position": {"x": 820, "y": 580},
         "conversation_history": [],
-        "relation": 0
+        "relation": 0,
+        "triggers": {
+        "input": {
+            "bye": {
+                "trigger":"Le joueur dit au revoir", 
+                "effect":"Martine dit au revoir. Fin de la conversation.", 
+                "threshold":0.8, 
+                "consequence_type":"dialogue_only", 
+                "output":"bye_trigger_probs=..."
+            }
     },
+        "output": {
+            "bye": {
+                "trigger":"Azzedine dit au revoir", 
+                "threshold":0.8, 
+                "output":"bye_trigger_probs=..."
+            }
+        }}},
     "roberte": {
         "name": "Roberte",
         "role": "Cuisinière de l'île",
@@ -123,6 +178,23 @@
         "building": "Auberge (maison avec terrasse au centre)",
         "position": {"x": 590, "y": 480},
         "conversation_history": [],
-        "relation": 0
-    }
+        "relation": 0,
+        "triggers": {
+        "input": {
+            "bye": {
+                "trigger":"Le joueur dit au revoir", 
+                "effect":"Martine dit au revoir. Fin de la conversation.", 
+                "threshold":0.8, 
+                "consequence_type":"dialogue_only", 
+                "output":"bye_trigger_probs=..."
+            }
+    },
+        "output": {
+            "bye": {
+                "trigger":"Azzedine dit au revoir", 
+                "threshold":0.8, 
+                "output":"bye_trigger_probs=..."
+            }
+        }
+    }}
 }

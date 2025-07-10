@@ -45,7 +45,7 @@ def create_character_graph() -> StateGraph:
     # Nœuds de réponse selon la complexité
     graph.add_node("simple_response", generate_simple_response)
     graph.add_node("assess_rag_need", assess_rag_need)
-    graph.add_node("rag_search", perform_rag_search)
+    graph.add_node("rag_search", perform_rag_search(llm_manager=LLMManager()))
     graph.add_node("validate_rag_results",validate_rag_results)
     graph.add_node("generate_response", generate_response)
     
@@ -88,6 +88,7 @@ def create_character_graph() -> StateGraph:
         check_if_needs_new_rag,
         {
             "rag_retry": "rag_search",
+            "generate_response": "generate_response"
         }
     )
     

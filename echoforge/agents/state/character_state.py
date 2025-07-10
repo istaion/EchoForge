@@ -30,6 +30,8 @@ class CharacterState(TypedDict):
     rag_query: Optional[str]
     rag_results: List[Any]
     relevant_knowledge: List[Any]
+    needs_rag_retry: bool
+    rag_retry_reason: Optional[str]
     
     # === ACTIONS ET DÉCLENCHEURS ===
     input_trigger_probs: Optional[Dict[str, float]]

@@ -65,17 +65,18 @@ INTENTION: {intent}
 Détermine si ce message nécessite une recherche dans les connaissances du personnage ou du monde.
 
 CRITÈRES POUR RECHERCHE RAG:
-- Questions sur l'histoire, le passé, les événements
-- Demandes d'informations spécifiques sur le monde ou les relations
+- Questions sur l’histoire, le passé ou l’enfance du personnage
+- Demandes sur les événements passés, souvenirs ou motivations
+- Recherches sur le monde, les lieux, les autres personnages
 - Questions "pourquoi", "comment", "qui", "où", "quand"
 - Références à des secrets, mystères, ou connaissances spécialisées
-- Demandes d'explications détaillées
+- Demandes d’explications ou d’histoires détaillées
 
 CRITÈRES POUR PAS DE RECHERCHE:
 - Salutations simples ("bonjour", "salut")
-- Réponses courtes ("oui", "non", "merci")
-- Questions sur l'état actuel simple
-- Conversations sociales basiques
+- Réponses brèves ("oui", "non", "merci")
+- Réactions sociales immédiates sans contenu narratif
+- Questions très génériques ou déjà connues du personnage sans contexte
 
 Réponds EXACTEMENT dans ce format JSON:
 {{
@@ -88,6 +89,9 @@ Réponds EXACTEMENT dans ce format JSON:
 Exemple:
 Message: "Raconte-moi l'histoire de l'île"
 Réponse: {{"needs_rag": true, "confidence": 0.95, "reasoning": "Demande d'informations historiques spécifiques", "query": "histoire île événements passé"}}
+
+Message: "Parle-moi de ton passé"
+Réponse: {{"needs_rag": true, "confidence": 0.92, "reasoning": "Demande directe sur le passé du personnage", "query": "passé enfance souvenirs"}}
 
 Message: "Bonjour comment ça va"
 Réponse: {{"needs_rag": false, "confidence": 0.9, "reasoning": "Salutation simple", "query": null}}
@@ -108,6 +112,9 @@ RÉPONSE:"""
                 response_clean = response_clean[3:-3]
             
             result = json.loads(response_clean)
+            query = result.get("query")
+            if isinstance(query, str) and query.strip().lower() == "null":
+                query = None
             
             # Validation et structuration de la réponse
             return {

@@ -8,7 +8,7 @@ from echoforge.utils.config import get_config
 
 config = get_config()
 @traceable
-def perform_rag_search(state: CharacterState) -> CharacterState:
+def perform_rag_search(llm_manager):
     """
     Effectue une recherche RAG basée sur la requête déterminée.
     
@@ -18,7 +18,7 @@ def perform_rag_search(state: CharacterState) -> CharacterState:
     Returns:
         État mis à jour avec les résultats RAG
     """
-    def fn(llm_manager):
+    def fn(state: CharacterState) -> CharacterState:
         state["processing_steps"].append("rag_search")
         query = state["rag_query"][-1]
 
