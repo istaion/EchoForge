@@ -183,7 +183,7 @@
         "input": {
             "bye": {
                 "trigger":"Le joueur dit au revoir", 
-                "effect":"Martine dit au revoir. Fin de la conversation.", 
+                "effect":"Roberte dit au revoir. Fin de la conversation.", 
                 "threshold":0.8, 
                 "consequence_type":"dialogue_only", 
                 "output":"bye_trigger_probs=..."

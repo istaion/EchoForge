@@ -105,7 +105,10 @@ RÉPONSE:"""
         try:
             import json
             # Nettoie la réponse pour extraire le JSON
-            response_clean = llm_response.strip()
+            if hasattr(llm_response, "content"):
+                response_clean = llm_response.content.strip()
+            else:
+                response_clean = str(llm_response).strip()
             if response_clean.startswith("```json"):
                 response_clean = response_clean[7:-3]
             elif response_clean.startswith("```"):

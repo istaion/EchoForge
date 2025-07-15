@@ -68,32 +68,3 @@ def check_if_needs_new_rag(state: CharacterState) -> str:
         return "rag_retry"
     else:
         return "generate_response"
-
-def check_if_needs_memory_update(state: CharacterState) -> str:
-    """
-    Détermine si une mise à jour de la mémoire est nécessaire.
-    
-    Args:
-        state: État actuel du personnage
-        
-    Returns:
-        Nom du prochain nœud à exécuter
-    """
-    # Critères pour mise à jour mémoire
-    message_length = len(state["user_message"].split())
-    has_emotional_content = state["message_intent"] == "emotional"
-    # has_game_actions = bool(state["planned_actions"])
-    
-    needs_memory_update = (
-        message_length > 5 or 
-        has_emotional_content)
-        # has_game_actions or
-        # state["complexity_level"] == ComplexityLevel.COMPLEX
-    
-    
-    state["processing_steps"].append(f"memory_routing_{'update' if needs_memory_update else 'skip'}")
-    
-    if needs_memory_update:
-        return "memory_update"
-    else:
-        return "finalize"

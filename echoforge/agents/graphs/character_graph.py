@@ -1,4 +1,3 @@
-
 from langgraph.graph import StateGraph, END
 from echoforge.agents.state.character_state import CharacterState
 from echoforge.agents.nodes.perception import perceive_input, interpret_player_input_node, decide_intent_node, interpret_character_output
@@ -6,12 +5,11 @@ from echoforge.agents.nodes.rag_assessment import assess_rag_need, validate_rag_
 from echoforge.agents.nodes.rag_search import perform_rag_search
 from echoforge.agents.nodes.response_generation import generate_simple_response, generate_response
 from echoforge.agents.nodes.memory_update import update_character_memory, finalize_interaction
-from echoforge.agents.checkpointers.postgres_checkpointer import PostgreSQLCheckpointSaver
+from echoforge.agents.checkpointers.postgres_checkpointer import create_safe_checkpointer, NoOpCheckpointSaver
 from langsmith import traceable
 from echoforge.agents.conditions.complexity_router import (
     route_by_complexity, 
     route_by_rag_need, 
-    check_if_needs_memory_update,
     check_if_needs_new_rag
 )
 from echoforge.core.llm_providers import LLMManager
@@ -20,19 +18,21 @@ from sqlmodel import Session, select, and_
 from echoforge.db.database import get_session
 from typing import Dict, Any, List, Optional
 from echoforge.db.models.memory import ConversationSummary
+import os
 
 config = get_config()
 
 
-def create_character_graph_with_memory(character_name: str) -> StateGraph:
+def create_character_graph_with_memory(character_name: str, enable_checkpointer: bool = True) -> StateGraph:
     """
     Crée le graphe principal d'un personnage avec système de mémoire intégré.
     
     Args:
         character_name: Nom du personnage pour la persistance
+        enable_checkpointer: Active ou désactive le checkpointer
         
     Returns:
-        StateGraph: Graphe compilé avec checkpointer PostgreSQL
+        StateGraph: Graphe compilé avec ou sans checkpointer
     """
     
     # === CRÉATION DU GRAPHE ===
@@ -100,14 +100,7 @@ def create_character_graph_with_memory(character_name: str) -> StateGraph:
     # Depuis les réponses, routage vers mémoire ou finalisation
     graph.add_edge("simple_response", "interpret_output")
     graph.add_edge("generate_response", "interpret_output")
-    graph.add_conditional_edges(
-        "interpret_output",
-        check_if_needs_memory_update,
-        {
-            "memory_update": "memory_update",
-            "finalize": "finalize"
-        }
-    )
+    graph.add_edge("interpret_output", "memory_update")
     
     # Depuis la mise à jour mémoire, vers la finalisation
     graph.add_edge("memory_update", "finalize")
@@ -115,20 +108,55 @@ def create_character_graph_with_memory(character_name: str) -> StateGraph:
     # Depuis la finalisation, fin du graphe
     graph.add_edge("finalize", END)
     
-    # === COMPILATION AVEC CHECKPOINTER ===
-    checkpointer = PostgreSQLCheckpointSaver(character_name)
-    compiled_graph = graph.compile(checkpointer=checkpointer)
-    
-    return compiled_graph
+    # === COMPILATION AVEC CHECKPOINTER SÉCURISÉ ===
+    try:
+        # Crée un checkpointer sûr avec fallback automatique
+        checkpointer = create_safe_checkpointer(
+            character_name=character_name,
+            enable_checkpointer=enable_checkpointer
+        )
+        
+        # Compile le graphe avec le checkpointer
+        compiled_graph = graph.compile(checkpointer=checkpointer)
+        
+        # Teste la compilation
+        print(f"✅ Graphe compilé avec succès pour {character_name}")
+        
+        return compiled_graph
+        
+    except Exception as e:
+        print(f"⚠️ Erreur lors de la compilation avec checkpointer: {e}")
+        print("📝 Compilation sans checkpointer comme fallback")
+        
+        # Fallback : compilation sans checkpointer
+        return graph.compile()
 
 
 class CharacterGraphManager:
     """
     Gestionnaire pour les graphes de personnages avec mémoire persistante.
+    Version améliorée avec système de fallback robuste.
     """
     
-    def __init__(self):
-        self._character_graphs = {} 
+    def __init__(self, enable_checkpointer: bool = True):
+        self._character_graphs = {}
+        self.enable_checkpointer = enable_checkpointer
+        self._fallback_mode = False
+        
+        # Teste la disponibilité du système de base de données
+        self._test_database_connection()
+    
+    def _test_database_connection(self):
+        """Teste la connexion à la base de données."""
+        try:
+            with get_session() as session:
+                session.exec(select(ConversationSummary).limit(1))
+            print("✅ Connexion à la base de données OK")
+        except Exception as e:
+            print(f"⚠️ Problème de connexion à la base de données: {e}")
+            print("📝 Mode fallback activé - fonctionnalités limitées")
+            self._fallback_mode = True
+            self.enable_checkpointer = False
     
     def get_or_create_graph(self, character_name: str) -> StateGraph:
         """
@@ -138,12 +166,28 @@ class CharacterGraphManager:
             character_name: Nom du personnage
             
         Returns:
-            Graphe compilé avec mémoire persistante
+            Graphe compilé avec ou sans mémoire persistante
         """
         if character_name not in self._character_graphs:
-            self._character_graphs[character_name] = create_character_graph_with_memory(character_name)
+            try:
+                self._character_graphs[character_name] = create_character_graph_with_memory(
+                    character_name=character_name,
+                    enable_checkpointer=self.enable_checkpointer and not self._fallback_mode
+                )
+            except Exception as e:
+                print(f"⚠️ Erreur création graphe pour {character_name}: {e}")
+                print("📝 Création d'un graphe simplifié sans persistance")
+                self._character_graphs[character_name] = self._create_simple_graph()
         
         return self._character_graphs[character_name]
+    
+    def _create_simple_graph(self) -> StateGraph:
+        """Crée un graphe simplifié sans persistance pour les cas d'urgence."""
+        graph = StateGraph(CharacterState)
+        graph.add_node("simple_process", generate_simple_response)
+        graph.set_entry_point("simple_process")
+        graph.add_edge("simple_process", END)
+        return graph.compile()
     
     async def process_message(
         self, 
@@ -186,24 +230,74 @@ class CharacterGraphManager:
             }
         }
         
-        # Exécution avec persistance automatique
+        # Exécution avec gestion d'erreurs robuste
         try:
-            result = await graph.ainvoke(initial_state, config=config)
+            if self._fallback_mode:
+                # Mode fallback : exécution simple sans persistance
+                result = await self._execute_simple_fallback(initial_state, config)
+            else:
+                # Exécution normale avec persistance
+                result = await graph.ainvoke(initial_state, config=config)
             
             # Ajout d'informations sur la persistance
             result["memory_info"] = {
                 "thread_id": thread_id,
                 "session_id": session_id,
                 "character_name": character_name,
-                "persistence_enabled": True
+                "persistence_enabled": not self._fallback_mode,
+                "checkpointer_enabled": self.enable_checkpointer
             }
             
             return result
             
         except Exception as e:
             print(f"⚠️ Erreur traitement message avec mémoire: {e}")
-            # Fallback sans persistance
-            return await self._fallback_processing(initial_state, config)
+            # Fallback final
+            return await self._execute_emergency_fallback(initial_state, config, str(e))
+    
+    async def _execute_simple_fallback(self, initial_state: CharacterState, config: dict) -> dict:
+        """Exécute un traitement simple sans persistance."""
+        try:
+            # Traitement simplifié
+            simple_graph = self._create_simple_graph()
+            result = await simple_graph.ainvoke(initial_state, config=config)
+            
+            # Ajout d'informations de fallback
+            result["fallback_info"] = {
+                "reason": "database_unavailable",
+                "mode": "simple_processing"
+            }
+            
+            return result
+            
+        except Exception as e:
+            print(f"⚠️ Erreur dans le fallback simple: {e}")
+            return await self._execute_emergency_fallback(initial_state, config, str(e))
+    
+    async def _execute_emergency_fallback(self, initial_state: CharacterState, config: dict, error_msg: str) -> dict:
+        """Fallback d'urgence avec réponse générée localement."""
+        character_name = initial_state.get("character_name", "Personnage")
+        user_message = initial_state.get("user_message", "")
+        
+        # Réponse d'urgence
+        emergency_response = f"Je suis {character_name}. Désolé, je rencontre des difficultés techniques en ce moment. Pouvez-vous répéter votre message ?"
+        
+        # État de retour minimal
+        return {
+            "response": emergency_response,
+            "user_message": user_message,
+            "character_name": character_name,
+            "emergency_fallback": True,
+            "error_info": {
+                "error": error_msg,
+                "fallback_reason": "system_failure"
+            },
+            "conversation_history": initial_state.get("conversation_history", []),
+            "debug_info": {
+                "emergency_mode": True,
+                "original_error": error_msg
+            }
+        }
     
     def _build_initial_state(
         self, 
@@ -255,17 +349,6 @@ class CharacterGraphManager:
             debug_info={}
         )
     
-    async def _fallback_processing(self, initial_state: CharacterState, config: dict) -> dict:
-        """Traitement de fallback sans persistance."""
-        # Implémentation simplifiée sans checkpointer
-        simple_graph = StateGraph(CharacterState)
-        simple_graph.add_node("simple_process", generate_simple_response)
-        simple_graph.set_entry_point("simple_process")
-        simple_graph.add_edge("simple_process", END)
-        
-        compiled_simple = simple_graph.compile()
-        return await compiled_simple.ainvoke(initial_state, config=config)
-    
     def get_conversation_history_summary(
         self, 
         character_name: str, 
@@ -283,17 +366,34 @@ class CharacterGraphManager:
         Returns:
             Résumé structuré de l'historique
         """
-        from echoforge.agents.nodes.memory_update import EchoForgeMemoryManager
+        if self._fallback_mode:
+            return {
+                "summaries": [],
+                "recent_messages": [],
+                "total_interactions": 0,
+                "error": "Database unavailable"
+            }
         
-        llm_manager = LLMManager()
-        memory_manager = EchoForgeMemoryManager(llm_manager)
-        
-        return memory_manager.get_conversation_context(
-            character_name=character_name,
-            thread_id=thread_id,
-            include_summaries=True,
-            max_summaries=max_summaries
-        )
+        try:
+            from echoforge.agents.nodes.memory_update import EchoForgeMemoryManager
+            
+            llm_manager = LLMManager()
+            memory_manager = EchoForgeMemoryManager(llm_manager)
+            
+            return memory_manager.get_conversation_context(
+                character_name=character_name,
+                thread_id=thread_id,
+                include_summaries=True,
+                max_summaries=max_summaries
+            )
+        except Exception as e:
+            print(f"⚠️ Erreur récupération historique: {e}")
+            return {
+                "summaries": [],
+                "recent_messages": [],
+                "total_interactions": 0,
+                "error": str(e)
+            }
     
     def clear_conversation_memory(
         self, 
@@ -312,6 +412,10 @@ class CharacterGraphManager:
         Returns:
             True si succès, False sinon
         """
+        if self._fallback_mode:
+            print("⚠️ Effacement mémoire impossible - mode fallback")
+            return False
+        
         try:
             with get_session() as session:
                 if not keep_summaries:
@@ -332,3 +436,19 @@ class CharacterGraphManager:
         except Exception as e:
             print(f"⚠️ Erreur effacement mémoire: {e}")
             return False
+    
+    def get_status(self) -> dict:
+        """Retourne le statut du gestionnaire."""
+        return {
+            "database_available": not self._fallback_mode,
+            "checkpointer_enabled": self.enable_checkpointer,
+            "graphs_created": len(self._character_graphs),
+            "fallback_mode": self._fallback_mode
+        }
+    
+    def toggle_checkpointer(self, enable: bool):
+        """Active/désactive le checkpointer."""
+        self.enable_checkpointer = enable
+        # Efface les graphes existants pour qu'ils soient recréés
+        self._character_graphs.clear()
+        print(f"🔄 Checkpointer {'activé' if enable else 'désactivé'} - graphes rechargés")
