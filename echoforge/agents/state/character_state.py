@@ -20,14 +20,23 @@ class CharacterState(TypedDict):
     # === CONTEXTE PERSONNAGE ===
     character_name: str
     character_data: Dict[str, Any]
+
+    # === 🆕 IDENTIFIANTS DE SESSION ===
+    thread_id: Optional[str] 
+    session_id: Optional[str]  
     
     # === CONTEXTE CONVERSATIONNEL ===
     conversation_history: List[Dict[str, str]]
     context_summary: Optional[str]
     
+    # === 🆕 MÉMOIRE PERSISTANTE ===
+    previous_summaries: Optional[List[Dict[str, Any]]]  
+    memory_context: Optional[Dict[str, Any]] 
+    total_interactions: Optional[int] 
+
     # === RAG ET CONNAISSANCES ===
     needs_rag_search: bool
-    rag_query: Optional[str]
+    rag_query: Optional[List[str]]
     rag_results: List[Any]
     relevant_knowledge: List[Any]
     needs_rag_retry: bool
@@ -37,8 +46,13 @@ class CharacterState(TypedDict):
     input_trigger_probs: Optional[Dict[str, float]]
     activated_input_triggers: Optional[List[str]]
     refused_input_triggers: Optional[List[str]]
-    output_trigger_probs:Optional[Dict[str, float]]
-    
+    output_trigger_probs: Optional[Dict[str, Dict[str, Any]]]
+
+    # === 🆕 DÉCLENCHEURS DE MÉMOIRE ===
+    memory_trigger_activated: Optional[bool] 
+    memory_trigger_type: Optional[str] 
+    memory_summary_created: Optional[bool] 
+
     # === MÉTADONNÉES ===
     processing_start_time: float
     processing_steps: List[str]

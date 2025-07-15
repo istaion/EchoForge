@@ -1,4 +1,3 @@
-"""Graphe principal pour les personnages EchoForge utilisant LangGraph."""
 
 from langgraph.graph import StateGraph, END
 from echoforge.agents.state.character_state import CharacterState
@@ -7,6 +6,7 @@ from echoforge.agents.nodes.rag_assessment import assess_rag_need, validate_rag_
 from echoforge.agents.nodes.rag_search import perform_rag_search
 from echoforge.agents.nodes.response_generation import generate_simple_response, generate_response
 from echoforge.agents.nodes.memory_update import update_character_memory, finalize_interaction
+from echoforge.agents.checkpointers.postgres_checkpointer import PostgreSQLCheckpointSaver
 from langsmith import traceable
 from echoforge.agents.conditions.complexity_router import (
     route_by_complexity, 
@@ -16,18 +16,23 @@ from echoforge.agents.conditions.complexity_router import (
 )
 from echoforge.core.llm_providers import LLMManager
 from echoforge.utils.config import get_config
+from sqlmodel import Session, select, and_
+from echoforge.db.database import get_session
+from typing import Dict, Any, List, Optional
+from echoforge.db.models.memory import ConversationSummary
 
 config = get_config()
 
-def create_character_graph() -> StateGraph:
+
+def create_character_graph_with_memory(character_name: str) -> StateGraph:
     """
-    Crée le graphe principal d'un personnage EchoForge.
+    Crée le graphe principal d'un personnage avec système de mémoire intégré.
     
-    Ce graphe gère le flux complet depuis la perception d'un message
-    jusqu'à la génération de la réponse finale avec mise à jour de la mémoire.
-    
+    Args:
+        character_name: Nom du personnage pour la persistance
+        
     Returns:
-        StateGraph: Graphe compilé prêt à être exécuté
+        StateGraph: Graphe compilé avec checkpointer PostgreSQL
     """
     
     # === CRÉATION DU GRAPHE ===
@@ -46,11 +51,11 @@ def create_character_graph() -> StateGraph:
     graph.add_node("simple_response", generate_simple_response)
     graph.add_node("assess_rag_need", assess_rag_need)
     graph.add_node("rag_search", perform_rag_search(llm_manager=LLMManager()))
-    graph.add_node("validate_rag_results",validate_rag_results)
+    graph.add_node("validate_rag_results", validate_rag_results)
     graph.add_node("generate_response", generate_response)
     
-    # Nœuds de finalisation
-    graph.add_node("interpret_output",interpret_character_output(llm_manager=LLMManager()))
+    # Nœuds de finalisation avec nouveau système de mémoire
+    graph.add_node("interpret_output", interpret_character_output(llm_manager=LLMManager()))
     graph.add_node("memory_update", update_character_memory)
     graph.add_node("finalize", finalize_interaction)
     
@@ -60,8 +65,8 @@ def create_character_graph() -> StateGraph:
     # === DÉFINITION DES FLUX ===
     
     # Depuis la perception, routage selon la complexité
-    graph.add_edge("interpret_input","decide_intent")
-    graph.add_edge("decide_intent","perceive")
+    graph.add_edge("interpret_input", "decide_intent")
+    graph.add_edge("decide_intent", "perceive")
     graph.add_conditional_edges(
         "perceive",
         route_by_complexity,
@@ -93,8 +98,8 @@ def create_character_graph() -> StateGraph:
     )
     
     # Depuis les réponses, routage vers mémoire ou finalisation
-    graph.add_edge("simple_response","interpret_output")
-    graph.add_edge("generate_response","interpret_output")
+    graph.add_edge("simple_response", "interpret_output")
+    graph.add_edge("generate_response", "interpret_output")
     graph.add_conditional_edges(
         "interpret_output",
         check_if_needs_memory_update,
@@ -110,90 +115,104 @@ def create_character_graph() -> StateGraph:
     # Depuis la finalisation, fin du graphe
     graph.add_edge("finalize", END)
     
-    return graph
-
-
-def create_simple_chat_graph() -> StateGraph:
-    """
-    Crée un graphe simplifié pour les conversations rapides.
+    # === COMPILATION AVEC CHECKPOINTER ===
+    checkpointer = PostgreSQLCheckpointSaver(character_name)
+    compiled_graph = graph.compile(checkpointer=checkpointer)
     
-    Ce graphe optimisé évite les étapes complexes pour les interactions simples
-    comme les salutations ou réponses courtes.
-    
-    Returns:
-        StateGraph: Graphe simplifié compilé
-    """
-    
-    graph = StateGraph(CharacterState)
-    
-    # Nœuds simplifiés
-    graph.add_node("quick_perceive", perceive_input)
-    graph.add_node("quick_response", generate_simple_response)  
-    graph.add_node("quick_finalize", finalize_interaction)
-    
-    # Flux linéaire simplifié
-    graph.set_entry_point("quick_perceive")
-    graph.add_edge("quick_perceive", "quick_response")
-    graph.add_edge("quick_response", "quick_finalize")
-    graph.add_edge("quick_finalize", END)
-    
-    return graph
+    return compiled_graph
 
 
 class CharacterGraphManager:
     """
-    Gestionnaire pour les graphes de personnages.
-    
-    Permet de sélectionner automatiquement le bon graphe selon le contexte
-    et de gérer l'exécution avec configuration appropriée.
+    Gestionnaire pour les graphes de personnages avec mémoire persistante.
     """
     
     def __init__(self):
-        self.main_graph = create_character_graph()
-        self.simple_graph = create_simple_chat_graph()
-        self.compiled_main = self.main_graph.compile()
-        self.compiled_simple = self.simple_graph.compile()
-
+        self._character_graphs = {} 
+    
+    def get_or_create_graph(self, character_name: str) -> StateGraph:
+        """
+        Récupère ou crée un graphe pour un personnage donné.
+        
+        Args:
+            character_name: Nom du personnage
+            
+        Returns:
+            Graphe compilé avec mémoire persistante
+        """
+        if character_name not in self._character_graphs:
+            self._character_graphs[character_name] = create_character_graph_with_memory(character_name)
+        
+        return self._character_graphs[character_name]
+    
     async def process_message(
         self, 
         user_message: str, 
         character_data: dict,
-        use_simple_mode: bool = False,
-        thread_id: str = "default"
+        thread_id: str = "default",
+        session_id: Optional[str] = None
     ) -> dict:
         """
-        Traite un message utilisateur avec le graphe approprié.
+        Traite un message avec persistance automatique de la mémoire.
         
         Args:
             user_message: Message de l'utilisateur
             character_data: Données du personnage
-            use_simple_mode: Force l'utilisation du graphe simple
             thread_id: ID pour la persistance de conversation
+            session_id: ID de session utilisateur
             
         Returns:
             État final avec la réponse générée
         """
+        character_name = character_data.get("name", "unknown")
         
-        # Construction de l'état initial
-        initial_state = self._build_initial_state(user_message, character_data)
+        # Récupération du graphe avec mémoire
+        graph = self.get_or_create_graph(character_name)
         
-        # Configuration pour LangGraph
+        # Construction de l'état initial avec informations de session
+        initial_state = self._build_initial_state(
+            user_message, 
+            character_data, 
+            thread_id, 
+            session_id
+        )
+        
+        # Configuration pour LangGraph avec thread_id
         config = {
             "configurable": {
-                "thread_id": thread_id
+                "thread_id": thread_id,
+                "session_id": session_id,
+                "character_name": character_name
             }
         }
         
-        # Sélection du graphe
-        if use_simple_mode or self._should_use_simple_graph(user_message):
-            result = await self.compiled_simple.ainvoke(initial_state, config=config)
-        else:
-            result = await self.compiled_main.ainvoke(initial_state, config=config)
-        
-        return result
+        # Exécution avec persistance automatique
+        try:
+            result = await graph.ainvoke(initial_state, config=config)
+            
+            # Ajout d'informations sur la persistance
+            result["memory_info"] = {
+                "thread_id": thread_id,
+                "session_id": session_id,
+                "character_name": character_name,
+                "persistence_enabled": True
+            }
+            
+            return result
+            
+        except Exception as e:
+            print(f"⚠️ Erreur traitement message avec mémoire: {e}")
+            # Fallback sans persistance
+            return await self._fallback_processing(initial_state, config)
     
-    def _build_initial_state(self, user_message: str, character_data: dict) -> CharacterState:
-        """Construit l'état initial pour le graphe."""
+    def _build_initial_state(
+        self, 
+        user_message: str, 
+        character_data: dict, 
+        thread_id: str,
+        session_id: Optional[str]
+    ) -> CharacterState:
+        """Construit l'état initial avec informations de session."""
         
         return CharacterState(
             # Input
@@ -208,112 +227,108 @@ class CharacterGraphManager:
             character_name=character_data.get("name", "unknown"),
             character_data=character_data,
             
-            # Conversation
+            # Conversation avec persistance
             conversation_history=character_data.get("conversation_history", []),
             context_summary=None,
+            
+            # Informations de session
+            thread_id=thread_id,
+            session_id=session_id,
             
             # RAG
             needs_rag_search=False,
             rag_query=None,
             rag_results=[],
             relevant_knowledge=[],
+            needs_rag_retry=False,
+            rag_retry_reason=None,
             
             # Actions
-            trigger_probs=character_data.get("triggers"),
-            # planned_actions=[],
-            # triggered_events=[],
-            # game_state_changes={},
-
+            input_trigger_probs=None,
+            activated_input_triggers=None,
+            refused_input_triggers=None,
+            output_trigger_probs=None,
+            
             # Métadonnées
             processing_start_time=0.0,
             processing_steps=[],
             debug_info={}
         )
     
-    # def _build_initial_state(self, user_message: str, character_data: dict) -> CharacterState:
-    #     """Construit l'état initial pour le graphe."""
+    async def _fallback_processing(self, initial_state: CharacterState, config: dict) -> dict:
+        """Traitement de fallback sans persistance."""
+        # Implémentation simplifiée sans checkpointer
+        simple_graph = StateGraph(CharacterState)
+        simple_graph.add_node("simple_process", generate_simple_response)
+        simple_graph.set_entry_point("simple_process")
+        simple_graph.add_edge("simple_process", END)
         
-    #     return CharacterState(
-    #         # Input
-    #         user_message=user_message,
-    #         response="",
-            
-    #         # Analyse (sera remplie par le graphe)
-    #         parsed_message=None,
-    #         message_intent=None,
-    #         complexity_level="medium",
-            
-    #         # Personnage
-    #         character_name=character_data.get("name", "unknown"),
-    #         personality_traits=character_data.get("personality", {}),
-    #         current_emotion=character_data.get("current_emotion", "neutral"),
-    #         character_knowledge=character_data.get("knowledge", []),
-            
-    #         # Conversation
-    #         conversation_history=character_data.get("conversation_history", []),
-    #         context_summary=None,
-            
-    #         # RAG
-    #         needs_rag_search=False,
-    #         rag_query=None,
-    #         rag_results=[],
-    #         relevant_knowledge=[],
-            
-    #         # Actions
-    #         planned_actions=[],
-    #         triggered_events=[],
-    #         game_state_changes={},
-            
-    #         # Métadonnées
-    #         processing_start_time=0.0,
-    #         processing_steps=[],
-    #         debug_info={}
-    #     )
+        compiled_simple = simple_graph.compile()
+        return await compiled_simple.ainvoke(initial_state, config=config)
     
-    def _should_use_simple_graph(self, user_message: str) -> bool:
-        """Détermine si le graphe simple doit être utilisé."""
-        
-        message_lower = user_message.lower().strip()
-
-        # Patterns simples
-        simple_patterns = [
-            "bonjour", "salut", "hey", "hello",
-            "au revoir", "bye", "à bientôt",
-            "merci", "de rien", "ok", "d'accord",
-            "oui", "non", "peut-être"
-        ]
-        
-        if len(message_lower) < 10 and any(pattern in message_lower for pattern in simple_patterns):
-            return True
-        
-        return False
-    
-    def get_graph_visualization(self, graph_type: str = "main") -> str:
+    def get_conversation_history_summary(
+        self, 
+        character_name: str, 
+        thread_id: str,
+        max_summaries: int = 5
+    ) -> Dict[str, Any]:
         """
-        Retourne une représentation textuelle du graphe.
+        Récupère un résumé de l'historique de conversation.
         
         Args:
-            graph_type: "main" ou "simple"
+            character_name: Nom du personnage
+            thread_id: ID du thread
+            max_summaries: Nombre maximum de résumés à inclure
             
         Returns:
-            Représentation textuelle du graphe
+            Résumé structuré de l'historique
         """
+        from echoforge.agents.nodes.memory_update import EchoForgeMemoryManager
         
-        if graph_type == "simple":
-            return """
-Graphe Simple:
-perceive → simple_response → finalize → END
-            """
-        else:
-            return """
-Graphe Principal:
-perceive → [complexity_router]
-├─ simple_response → [memory_router] → finalize/memory_update → END
-└─ assess_rag_need → [rag_router]
-   ├─ rag_search → generate_response → [memory_router] → finalize/memory_update → END  
-   └─ generate_response → [memory_router] → finalize/memory_update → END
-            """
+        llm_manager = LLMManager()
+        memory_manager = EchoForgeMemoryManager(llm_manager)
         
-if __name__ == "__main__":
-    graph = CharacterGraphManager()
-# display(Image(graph.compiled_main.get_graph().draw_mermaid_png()))
+        return memory_manager.get_conversation_context(
+            character_name=character_name,
+            thread_id=thread_id,
+            include_summaries=True,
+            max_summaries=max_summaries
+        )
+    
+    def clear_conversation_memory(
+        self, 
+        character_name: str, 
+        thread_id: str,
+        keep_summaries: bool = True
+    ) -> bool:
+        """
+        Efface la mémoire de conversation pour un thread donné.
+        
+        Args:
+            character_name: Nom du personnage
+            thread_id: ID du thread
+            keep_summaries: Garder les résumés historiques
+            
+        Returns:
+            True si succès, False sinon
+        """
+        try:
+            with get_session() as session:
+                if not keep_summaries:
+                    # Suppression complète
+                    stmt = select(ConversationSummary).where(
+                        and_(
+                            ConversationSummary.character_name == character_name,
+                            ConversationSummary.thread_id == thread_id
+                        )
+                    )
+                    summaries = session.exec(stmt).all()
+                    for summary in summaries:
+                        session.delete(summary)
+                
+                session.commit()
+                return True
+                
+        except Exception as e:
+            print(f"⚠️ Erreur effacement mémoire: {e}")
+            return False
