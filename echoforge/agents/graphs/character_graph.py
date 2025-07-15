@@ -4,7 +4,7 @@ from echoforge.agents.nodes.perception import perceive_input, interpret_player_i
 from echoforge.agents.nodes.rag_assessment import assess_rag_need, validate_rag_results
 from echoforge.agents.nodes.rag_search import perform_rag_search
 from echoforge.agents.nodes.response_generation import generate_simple_response, generate_response
-from echoforge.agents.nodes.memory_update import update_character_memory, finalize_interaction
+from echoforge.agents.nodes.memory_update import update_character_memory, finalize_interaction, load_memory_context, check_memory_integration
 from echoforge.agents.checkpointers.postgres_checkpointer import create_safe_checkpointer, NoOpCheckpointSaver
 from langsmith import traceable
 from echoforge.agents.conditions.complexity_router import (
@@ -19,6 +19,7 @@ from echoforge.db.database import get_session
 from typing import Dict, Any, List, Optional
 from echoforge.db.models.memory import ConversationSummary
 import os
+import time
 
 config = get_config()
 
@@ -26,6 +27,7 @@ config = get_config()
 def create_character_graph_with_memory(character_name: str, enable_checkpointer: bool = True) -> StateGraph:
     """
     Crée le graphe principal d'un personnage avec système de mémoire intégré.
+    🆕 Version mise à jour avec support session_id complet.
     
     Args:
         character_name: Nom du personnage pour la persistance
@@ -40,12 +42,18 @@ def create_character_graph_with_memory(character_name: str, enable_checkpointer:
     
     # === AJOUT DES NŒUDS ===
     
-    # Nœud d'entrée : perception et analyse du message
+    # 🆕 Nœud d'entrée : chargement du contexte de mémoire avec session_id
+    graph.add_node("load_memory", load_memory_context)
+    
+    # Nœud de perception et analyse du message
     graph.add_node("perceive", perceive_input)
     
-    # Analyse des triggers :
+    # Analyse des triggers
     graph.add_node("interpret_input", interpret_player_input_node(llm_manager=LLMManager()))
     graph.add_node("decide_intent", decide_intent_node())
+    
+    # Nœud de vérification de l'intégration mémoire
+    graph.add_node("check_memory_integration", check_memory_integration)
     
     # Nœuds de réponse selon la complexité
     graph.add_node("simple_response", generate_simple_response)
@@ -54,21 +62,25 @@ def create_character_graph_with_memory(character_name: str, enable_checkpointer:
     graph.add_node("validate_rag_results", validate_rag_results)
     graph.add_node("generate_response", generate_response)
     
-    # Nœuds de finalisation avec nouveau système de mémoire
+    # Nœuds de finalisation avec système de mémoire
     graph.add_node("interpret_output", interpret_character_output(llm_manager=LLMManager()))
     graph.add_node("memory_update", update_character_memory)
     graph.add_node("finalize", finalize_interaction)
     
     # === DÉFINITION DU POINT D'ENTRÉE ===
-    graph.set_entry_point("interpret_input")
+    graph.set_entry_point("load_memory")
     
     # === DÉFINITION DES FLUX ===
     
-    # Depuis la perception, routage selon la complexité
+    # Flux avec chargement de mémoire
+    graph.add_edge("load_memory", "interpret_input")
     graph.add_edge("interpret_input", "decide_intent")
     graph.add_edge("decide_intent", "perceive")
+    graph.add_edge("perceive", "check_memory_integration")
+    
+    # Depuis la vérification mémoire, routage selon la complexité
     graph.add_conditional_edges(
-        "perceive",
+        "check_memory_integration",
         route_by_complexity,
         {
             "simple_response": "simple_response",
@@ -120,7 +132,7 @@ def create_character_graph_with_memory(character_name: str, enable_checkpointer:
         compiled_graph = graph.compile(checkpointer=checkpointer)
         
         # Teste la compilation
-        print(f"✅ Graphe compilé avec succès pour {character_name}")
+        print(f"✅ Graphe compilé avec succès pour {character_name} (avec récupération mémoire + session)")
         
         return compiled_graph
         
@@ -135,7 +147,7 @@ def create_character_graph_with_memory(character_name: str, enable_checkpointer:
 class CharacterGraphManager:
     """
     Gestionnaire pour les graphes de personnages avec mémoire persistante.
-    Version améliorée avec système de fallback robuste.
+    🆕 Version améliorée avec support session_id complet.
     """
     
     def __init__(self, enable_checkpointer: bool = True):
@@ -198,12 +210,13 @@ class CharacterGraphManager:
     ) -> dict:
         """
         Traite un message avec persistance automatique de la mémoire.
+        🆕 Version améliorée avec support session_id complet.
         
         Args:
             user_message: Message de l'utilisateur
             character_data: Données du personnage
             thread_id: ID pour la persistance de conversation
-            session_id: ID de session utilisateur
+            session_id: ID de session utilisateur (🆕 obligatoire pour filtering)
             
         Returns:
             État final avec la réponse générée
@@ -213,7 +226,7 @@ class CharacterGraphManager:
         # Récupération du graphe avec mémoire
         graph = self.get_or_create_graph(character_name)
         
-        # Construction de l'état initial avec informations de session
+        # 🆕 Construction de l'état initial avec session_id
         initial_state = self._build_initial_state(
             user_message, 
             character_data, 
@@ -221,7 +234,7 @@ class CharacterGraphManager:
             session_id
         )
         
-        # Configuration pour LangGraph avec thread_id
+        # 🆕 Configuration pour LangGraph avec thread_id ET session_id
         config = {
             "configurable": {
                 "thread_id": thread_id,
@@ -239,13 +252,29 @@ class CharacterGraphManager:
                 # Exécution normale avec persistance
                 result = await graph.ainvoke(initial_state, config=config)
             
-            # Ajout d'informations sur la persistance
+            # 🆕 Ajout d'informations sur la persistance et la mémoire avec session
             result["memory_info"] = {
                 "thread_id": thread_id,
                 "session_id": session_id,
                 "character_name": character_name,
                 "persistence_enabled": not self._fallback_mode,
-                "checkpointer_enabled": self.enable_checkpointer
+                "checkpointer_enabled": self.enable_checkpointer,
+                "context_summary_available": bool(result.get("context_summary")),
+                "previous_summaries_count": len(result.get("previous_summaries", [])),
+                "total_interactions": result.get("total_interactions", 0),
+                "session_filtered": session_id is not None  # 🆕 Indique si filtré par session
+            }
+            
+            # 🆕 Ajout des statistiques de mémoire pour l'interface avec session
+            result["memory_stats"] = {
+                "total_messages": result.get("total_interactions", 0),
+                "summaries": len(result.get("previous_summaries", [])),
+                "checkpoints": 0,  # À implémenter si nécessaire
+                "last_activity": time.strftime("%H:%M:%S"),
+                "context_loaded": bool(result.get("context_summary")),
+                "memory_integration_enabled": result.get("memory_integration", {}).get("should_integrate", False),
+                "session_id": session_id,  # 🆕 Inclut session_id dans les stats
+                "session_specific": session_id is not None  # 🆕 Indique si données spécifiques à session
             }
             
             return result
@@ -278,6 +307,7 @@ class CharacterGraphManager:
         """Fallback d'urgence avec réponse générée localement."""
         character_name = initial_state.get("character_name", "Personnage")
         user_message = initial_state.get("user_message", "")
+        session_id = initial_state.get("session_id")
         
         # Réponse d'urgence
         emergency_response = f"Je suis {character_name}. Désolé, je rencontre des difficultés techniques en ce moment. Pouvez-vous répéter votre message ?"
@@ -287,6 +317,7 @@ class CharacterGraphManager:
             "response": emergency_response,
             "user_message": user_message,
             "character_name": character_name,
+            "session_id": session_id,  # 🆕 Préserve session_id
             "emergency_fallback": True,
             "error_info": {
                 "error": error_msg,
@@ -296,6 +327,16 @@ class CharacterGraphManager:
             "debug_info": {
                 "emergency_mode": True,
                 "original_error": error_msg
+            },
+            "memory_stats": {
+                "total_messages": 0,
+                "summaries": 0,
+                "checkpoints": 0,
+                "last_activity": time.strftime("%H:%M:%S"),
+                "context_loaded": False,
+                "memory_integration_enabled": False,
+                "session_id": session_id,  # 🆕 Inclut session_id même en fallback
+                "session_specific": False
             }
         }
     
@@ -306,7 +347,10 @@ class CharacterGraphManager:
         thread_id: str,
         session_id: Optional[str]
     ) -> CharacterState:
-        """Construit l'état initial avec informations de session."""
+        """
+        Construit l'état initial avec informations de session.
+        🆕 Version mise à jour avec session_id dans tous les champs pertinents.
+        """
         
         return CharacterState(
             # Input
@@ -323,11 +367,16 @@ class CharacterGraphManager:
             
             # Conversation avec persistance
             conversation_history=character_data.get("conversation_history", []),
-            context_summary=None,
+            context_summary=None,  # Sera rempli par load_memory_context
             
-            # Informations de session
+            # 🆕 Mémoire persistante (sera remplie par load_memory_context avec session_id)
+            previous_summaries=None,  # Sera rempli par load_memory_context
+            memory_context=None,      # Sera rempli par load_memory_context
+            total_interactions=None,  # Sera rempli par load_memory_context
+            
+            # 🆕 Informations de session (IMPORTANT!)
             thread_id=thread_id,
-            session_id=session_id,
+            session_id=session_id,  # 🆕 Session ID pour filtrage
             
             # RAG
             needs_rag_search=False,
@@ -343,6 +392,11 @@ class CharacterGraphManager:
             refused_input_triggers=None,
             output_trigger_probs=None,
             
+            # Déclencheurs de mémoire
+            memory_trigger_activated=None,
+            memory_trigger_type=None,
+            memory_summary_created=None,
+            
             # Métadonnées
             processing_start_time=0.0,
             processing_steps=[],
@@ -353,14 +407,17 @@ class CharacterGraphManager:
         self, 
         character_name: str, 
         thread_id: str,
+        session_id: Optional[str] = None,  # 🆕 Ajout session_id
         max_summaries: int = 5
     ) -> Dict[str, Any]:
         """
         Récupère un résumé de l'historique de conversation.
+        🆕 Version mise à jour avec filtrage par session_id.
         
         Args:
             character_name: Nom du personnage
             thread_id: ID du thread
+            session_id: ID de session pour filtrage (🆕)
             max_summaries: Nombre maximum de résumés à inclure
             
         Returns:
@@ -371,6 +428,7 @@ class CharacterGraphManager:
                 "summaries": [],
                 "recent_messages": [],
                 "total_interactions": 0,
+                "session_id": session_id,  # 🆕 Inclut session_id
                 "error": "Database unavailable"
             }
         
@@ -380,9 +438,11 @@ class CharacterGraphManager:
             llm_manager = LLMManager()
             memory_manager = EchoForgeMemoryManager(llm_manager)
             
+            # 🆕 Appel avec session_id
             return memory_manager.get_conversation_context(
                 character_name=character_name,
                 thread_id=thread_id,
+                session_id=session_id,  # 🆕 Filtrage par session
                 include_summaries=True,
                 max_summaries=max_summaries
             )
@@ -392,6 +452,7 @@ class CharacterGraphManager:
                 "summaries": [],
                 "recent_messages": [],
                 "total_interactions": 0,
+                "session_id": session_id,  # 🆕 Inclut session_id même en cas d'erreur
                 "error": str(e)
             }
     
@@ -399,14 +460,17 @@ class CharacterGraphManager:
         self, 
         character_name: str, 
         thread_id: str,
+        session_id: Optional[str] = None,  # 🆕 Ajout session_id
         keep_summaries: bool = True
     ) -> bool:
         """
         Efface la mémoire de conversation pour un thread donné.
+        🆕 Version mise à jour avec filtrage par session_id.
         
         Args:
             character_name: Nom du personnage
             thread_id: ID du thread
+            session_id: ID de session pour filtrage (🆕)
             keep_summaries: Garder les résumés historiques
             
         Returns:
@@ -419,11 +483,12 @@ class CharacterGraphManager:
         try:
             with get_session() as session:
                 if not keep_summaries:
-                    # Suppression complète
+                    # 🆕 Suppression complète avec filtrage par session
                     stmt = select(ConversationSummary).where(
                         and_(
                             ConversationSummary.character_name == character_name,
-                            ConversationSummary.thread_id == thread_id
+                            ConversationSummary.thread_id == thread_id,
+                            ConversationSummary.session_id == session_id if session_id else True
                         )
                     )
                     summaries = session.exec(stmt).all()
@@ -431,6 +496,7 @@ class CharacterGraphManager:
                         session.delete(summary)
                 
                 session.commit()
+                print(f"✅ Mémoire effacée pour {character_name} (session: {session_id})")
                 return True
                 
         except Exception as e:
@@ -443,7 +509,9 @@ class CharacterGraphManager:
             "database_available": not self._fallback_mode,
             "checkpointer_enabled": self.enable_checkpointer,
             "graphs_created": len(self._character_graphs),
-            "fallback_mode": self._fallback_mode
+            "fallback_mode": self._fallback_mode,
+            "memory_context_loading": True,  # Indique que le chargement de contexte est actif
+            "session_support": True  # 🆕 Indique le support des sessions
         }
     
     def toggle_checkpointer(self, enable: bool):
@@ -452,3 +520,66 @@ class CharacterGraphManager:
         # Efface les graphes existants pour qu'ils soient recréés
         self._character_graphs.clear()
         print(f"🔄 Checkpointer {'activé' if enable else 'désactivé'} - graphes rechargés")
+    
+    # 🆕 Méthodes utilitaires pour les sessions
+    def get_session_statistics(self, session_id: str) -> Dict[str, Any]:
+        """
+        Récupère les statistiques pour une session donnée.
+        
+        Args:
+            session_id: ID de la session
+            
+        Returns:
+            Statistiques de la session
+        """
+        if self._fallback_mode:
+            return {"error": "Database unavailable"}
+        
+        try:
+            stats = {
+                "session_id": session_id,
+                "characters": {},
+                "total_summaries": 0,
+                "total_messages": 0
+            }
+            
+            with get_session() as session:
+                # Pour chaque personnage, récupère les stats
+                for character_name in self._character_graphs.keys():
+                    context = self.get_conversation_history_summary(
+                        character_name=character_name,
+                        thread_id=f"game_conversation_{character_name}",
+                        session_id=session_id
+                    )
+                    
+                    stats["characters"][character_name] = {
+                        "summaries": len(context.get("summaries", [])),
+                        "interactions": context.get("total_interactions", 0)
+                    }
+                    
+                    stats["total_summaries"] += len(context.get("summaries", []))
+                    stats["total_messages"] += context.get("total_interactions", 0)
+            
+            return stats
+            
+        except Exception as e:
+            return {"error": str(e)}
+    
+    def list_sessions_with_memory(self) -> List[str]:
+        """
+        Liste les sessions ayant des données de mémoire.
+        
+        Returns:
+            Liste des session_ids avec données
+        """
+        if self._fallback_mode:
+            return []
+        
+        try:
+            with get_session() as session:
+                stmt = select(ConversationSummary.session_id).distinct()
+                results = session.exec(stmt).all()
+                return [result for result in results if result]
+        except Exception as e:
+            print(f"⚠️ Erreur récupération sessions: {e}")
+            return []

@@ -131,7 +131,10 @@ def _generate_llm_response(state: CharacterState) -> Dict[str, Any]:
 
 
 def _build_comprehensive_prompt(state: CharacterState) -> str:
-    """Construit un prompt complet avec tout le contexte disponible."""
+    """
+    Construit un prompt complet avec tout le contexte disponible.
+    🆕 Version améliorée avec intégration du contexte de mémoire.
+    """
     
     # Récupération des données
     character_name = state["character_name"]
@@ -144,6 +147,12 @@ def _build_comprehensive_prompt(state: CharacterState) -> str:
     all_triggers = state["character_data"].get("triggers", {}).get("input", {})
     activated = state.get("activated_input_triggers", []) or []
     refused = [t for t in all_triggers.keys() if t not in activated]
+    
+    # 🆕 Récupération du contexte de mémoire
+    context_summary = state.get("context_summary")
+    previous_summaries = state.get("previous_summaries", [])
+    total_interactions = state.get("total_interactions", 0)
+    memory_integration = state.get("memory_integration", {})
     
     # Format des intentions activées
     def format_trigger_list(trigger_names):
@@ -160,18 +169,44 @@ PERSONNALITÉ: {_format_personality(personality)}
 ÉMOTION ACTUELLE: {emotion}
 NIVEAU RELATION AVEC LE PERSONNAGE JOUEUR (entre -10 et 10) : {user_relation}"""
 
-    # 2. Contexte RAG si disponible
-    context_section = ""
+    # 🆕 2. Section de contexte de mémoire
+    memory_section = ""
+    if context_summary or previous_summaries:
+        memory_section = f"""
+CONTEXTE DE MÉMOIRE (Total: {total_interactions} interactions):
+"""
+        
+        if context_summary:
+            memory_section += f"""
+RÉSUMÉ CONTEXTUEL:
+{context_summary}
+"""
+        
+        if previous_summaries and len(previous_summaries) > 0:
+            memory_section += f"""
+RÉSUMÉS PRÉCÉDENTS ({len(previous_summaries)} disponibles):
+"""
+            for i, summary in enumerate(previous_summaries[:2]):  # Limite à 2 résumés pour le prompt
+                summary_text = summary.get("text", "")
+                messages_count = summary.get("messages_count", 0)
+                memory_section += f"• Résumé {i+1} ({messages_count} échanges): {summary_text}\n"
+        
+        memory_section += f"""
+INTÉGRATION MÉMOIRE: {'Activée' if memory_integration.get('should_integrate', False) else 'Désactivée'}
+"""
+
+    # 3. Contexte RAG si disponible
+    rag_section = ""
     if rag_results:
         context_items = []
         for result in rag_results[:3]:  # Limite à 3 résultats les plus pertinents
             context_items.append(f"- {result['content']} (pertinence: {result['relevance']:.2f})")
         
-        context_section = f"""
+        rag_section = f"""
 CONNAISSANCES PERTINENTES:
 {chr(10).join(context_items)}"""
 
-    # 3. Historique de conversation récent
+    # 4. Historique de conversation récent
     history_section = ""
     if conversation_history:
         recent_history = conversation_history[-3:]  # 3 derniers échanges
@@ -188,10 +223,10 @@ CONNAISSANCES PERTINENTES:
         
         if history_items:
             history_section = f"""
-HISTORIQUE RÉCENT:
+HISTORIQUE RÉCENT DE CETTE SESSION:
 {chr(10).join(history_items)}"""
 
-    # === 4. Section sur les intentions détectées ===
+    # 5. Section sur les intentions détectées
     intent_section = f"""
 INTENTIONS DÉTECTÉES DANS LE MESSAGE DU JOUEUR :
 - Intentions activées :
@@ -201,7 +236,15 @@ INTENTIONS DÉTECTÉES DANS LE MESSAGE DU JOUEUR :
 {format_trigger_list(refused)}
 """
 
-    # 5. Instructions spécifiques
+    # 6. Instructions spécifiques avec intégration mémoire
+    memory_instructions = ""
+    if context_summary or previous_summaries:
+        memory_instructions = f"""
+7. IMPORTANTE: Utilise le contexte de mémoire ci-dessus pour maintenir la cohérence avec les interactions passées
+8. Si tu mentionnes des événements passés, assure-toi qu'ils sont cohérents avec le contexte de mémoire
+9. Adapte ton niveau de familiarité selon l'historique des interactions ({total_interactions} interactions totales)
+"""
+
     instructions_section = f"""
 MESSAGE ACTUEL DE L'UTILISATEUR: "{user_message}"
 
@@ -211,12 +254,12 @@ INSTRUCTIONS:
 3. Si tu as des connaissances pertinentes ci-dessus, intègre-les naturellement
 4. Tiens compte de l'historique de conversation pour la cohérence
 5. Si tu fais des actions physiques, mets-les entre *astérisques*
-6. Réponds en français de manière authentique à ton personnage
+6. Réponds en français de manière authentique à ton personnage{memory_instructions}
 
 RÉPONSE:"""
 
-    # === Assemblage final ===
-    full_prompt = f"""{identity_section}{context_section}{history_section}
+    # === Assemblage final avec mémoire ===
+    full_prompt = f"""{identity_section}{memory_section}{rag_section}{history_section}
 {intent_section}
 {instructions_section}"""
     

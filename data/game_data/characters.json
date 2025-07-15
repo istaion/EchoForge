@@ -41,6 +41,11 @@
             }
         },
         "output": {
+            "bye": {
+                "trigger":"Martine dit au revoir ou met fin à la conversation.", 
+                "threshold":0.8, 
+                "output":"bye_trigger_probs=..."
+            },
             "give_gold": {
                 "trigger":"Martine donne ou prète X pièce d'or au joueur", 
                 "threshold":0.9, 

@@ -291,6 +291,31 @@ class PostgreSQLCheckpointSaver(BaseCheckpointSaver):
             return
         return await asyncio.to_thread(self.put_writes, config, writes, task_id)
     
+    def list_session_ids(self) -> List[str]:
+        """
+        Récupère tous les `session_id` uniques présents dans la base pour ce personnage.
+        """
+        if not self.enabled:
+            return []
+        
+        try:
+            with get_session() as session:
+                stmt = (
+                    select(ConversationSummary.session_id)
+                    .where(
+                        and_(
+                            ConversationSummary.character_name == self.character_name,
+                            ConversationSummary.session_id.is_not(None)
+                        )
+                    )
+                    .distinct()
+                )
+                rows = session.exec(stmt).all()
+                return [row[0] for row in rows if row[0]]
+        except Exception as e:
+            print(f"⚠️ Erreur récupération session_ids: {e}")
+        return []
+    
     def disable(self):
         """Désactive le checkpointer."""
         self.enabled = False
