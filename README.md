@@ -8,3 +8,4 @@ Pas d'erreur si pas de triggers
 implémenter call_game_tools
 Finir les triggers des personnage
 Augmenter les chunks et implémenter le double rag
+Implémenter 1ère interraction

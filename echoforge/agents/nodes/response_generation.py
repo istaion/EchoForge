@@ -22,7 +22,7 @@ def generate_simple_response(state: CharacterState) -> CharacterState:
     character_name = state["character_name"]
     personality = state["character_data"]["personality"]
     intent = state["message_intent"]
-    emotion = state["character_data"]["current_emotion"]
+    emotion = state["character_data"].get("current_emotion", "neutral")
     
     # Génération de réponse simple selon l'intention
     response = _generate_personality_response(
@@ -103,8 +103,16 @@ def _generate_llm_response(state: CharacterState) -> Dict[str, Any]:
         # Appel au LLM
         llm_response = rag_system.llm.invoke(response_prompt)
         
+        # Gestion du type de réponse (string ou AIMessage)
+        if isinstance(llm_response, str):
+            content = llm_response.strip()
+        elif hasattr(llm_response, 'content'):
+            content = llm_response.content.strip()
+        else:
+            content = str(llm_response).strip()
+        
         return {
-            "content": llm_response.strip(),
+            "content": content,
             "method": "llm_call",
             "success": True,
             "prompt_length": len(response_prompt)
@@ -128,7 +136,7 @@ def _build_comprehensive_prompt(state: CharacterState) -> str:
     # Récupération des données
     character_name = state["character_name"]
     personality = state["character_data"].get("personality")
-    emotion = state["character_data"].get("current_emotion")
+    emotion = state["character_data"].get("current_emotion", "neutral")
     user_relation = state["character_data"].get("relation")
     user_message = state["user_message"]
     rag_results = state["rag_results"]
@@ -173,6 +181,10 @@ CONNAISSANCES PERTINENTES:
                 if "user" in exchange and "assistant" in exchange:
                     history_items.append(f"Utilisateur: {exchange['user']}")
                     history_items.append(f"Toi: {exchange['assistant']}")
+                elif exchange.get("role") == "user":
+                    history_items.append(f"Utilisateur: {exchange['content']}")
+                elif exchange.get("role") == "assistant":
+                    history_items.append(f"Toi: {exchange['content']}")
         
         if history_items:
             history_section = f"""
@@ -236,7 +248,7 @@ def _generate_fallback_response(state: CharacterState) -> str:
     
     character_name = state["character_name"]
     intent = state["message_intent"]
-    emotion = state["current_emotion"]
+    emotion = state["character_data"].get("current_emotion", "neutral")
     
     # Templates de fallback par intention
     fallback_templates = {

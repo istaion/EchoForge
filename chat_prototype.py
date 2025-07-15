@@ -12,15 +12,15 @@ import asyncio
 import time
 from langsmith import traceable
 from echoforge.utils.config import get_config
-import json
 
 config = get_config()
-# Import du système d'agents LangGraph
+
+# Import du système d'agents LangGraph avec mémoire avancée
 try:
     from echoforge.agents.graphs.character_graph import CharacterGraphManager
     from echoforge.agents.state.character_state import CharacterState
     AGENTS_AVAILABLE = True
-    print("✅ Système d'agents LangGraph chargé avec succès!")
+    print("✅ Système d'agents LangGraph avec mémoire avancée chargé avec succès!")
 except ImportError as e:
     print(f"⚠️ Erreur: Impossible d'importer le système d'agents: {e}")
     print("📝 Utilisation du système RAG de base comme fallback")
@@ -61,7 +61,8 @@ game_state = {
     "player_position": BALLOON_POSITION.copy(),
     "chat_open": False,
     "game_events": [],
-    "start_time": time.time()
+    "start_time": time.time(),
+    "memory_stats": {}  # 🆕 Statistiques de mémoire
 }
 
 # Instances globales
@@ -69,14 +70,14 @@ graph_manager = None
 rag_system = None
 
 class EchoForgeAgentWrapper:
-    """Wrapper pour intégrer les agents LangGraph avec le système existant."""
+    """Wrapper pour intégrer les agents LangGraph avec mémoire avancée."""
     
     def __init__(self):
         self.graph_manager = CharacterGraphManager() if AGENTS_AVAILABLE else None
         self.initialized = AGENTS_AVAILABLE
         
     async def get_character_response(self, character_key: str, user_message: str) -> str:
-        """Obtient une réponse du personnage via le système d'agents."""
+        """Obtient une réponse du personnage via le système d'agents avec mémoire."""
         
         if not self.initialized:
             return "❌ Système d'agents non disponible. Veuillez vérifier l'installation."
@@ -84,7 +85,7 @@ class EchoForgeAgentWrapper:
         try:
             character_data = CHARACTERS[character_key].copy()
             
-            # Traitement du message avec l'agent
+            # Traitement du message avec l'agent et mémoire avancée
             result = await self.graph_manager.process_message(
                 user_message=user_message,
                 character_data=character_data,
@@ -95,6 +96,10 @@ class EchoForgeAgentWrapper:
             CHARACTERS[character_key]['conversation_history'] = result.get('conversation_history', [])
             if 'current_emotion' in result:
                 CHARACTERS[character_key]['current_emotion'] = result['current_emotion']
+            
+            # 🆕 Mise à jour des statistiques de mémoire
+            if 'memory_stats' in result:
+                game_state["memory_stats"][character_key] = result['memory_stats']
             
             # Traitement des actions spéciales basées sur la réponse
             await self._process_agent_actions(character_key, result, user_message)
@@ -109,7 +114,13 @@ class EchoForgeAgentWrapper:
                 rag_used = bool(result.get('rag_results', []))
                 processing_time = debug_info.get('final_stats', {}).get('total_processing_time', 0)
                 
-                response += f"\n\n🐛 Debug: {complexity} | RAG: {rag_used} | {processing_time:.3f}s \n input_probs : {input_prob} \n output_probs : {output_prob}"
+                # 🆕 Infos mémoire
+                memory_info = ""
+                if 'memory_stats' in result:
+                    stats = result['memory_stats']
+                    memory_info = f"\n📊 Mémoire: {stats.get('total_messages', 0)} msgs | {stats.get('summaries', 0)} résumés"
+                
+                response += f"\n\n🐛 Debug: {complexity} | RAG: {rag_used} | {processing_time:.3f}s{memory_info}\n input_probs : {input_prob} \n output_probs : {output_prob}"
             
             return response
             
@@ -147,7 +158,8 @@ class EchoForgeAgentWrapper:
             "user_message": user_message,
             "response_summary": result['response'][:100] + "...",
             "complexity": result.get('complexity_level', 'unknown'),
-            "rag_used": bool(result.get('rag_results', []))
+            "rag_used": bool(result.get('rag_results', [])),
+            "memory_summarized": result.get('memory_summarized', False)  # 🆕
         }
         game_state["game_events"].append(event)
         
@@ -199,140 +211,17 @@ class EchoForgeAgentWrapper:
             game_state["montgolfiere_repaired"] = True
             print(f"🎈 Claude a réparé votre montgolfière! Vous pouvez repartir!")
 
-
-class RAGSystemWrapper:
-    """Wrapper pour le système RAG de base comme fallback."""
-    
-    def __init__(self):
-        if RAG_AVAILABLE:
+    # 🆕 Méthodes pour la gestion de la mémoire
+    async def get_memory_stats(self, character_key: str) -> dict:
+        """Récupère les statistiques de mémoire pour un personnage."""
+        if self.initialized and self.graph_manager:
             try:
-                print("🚀 Initialisation du système RAG...")
-                self.rag_system = EchoForgeRAG(
-                    data_path="./data",
-                    vector_store_path="./vector_stores"
+                return await self.graph_manager.get_memory_stats(
+                    thread_id=f"game_conversation_{character_key}"
                 )
-                self._build_vector_stores()
-                self.initialized = True
-                print("✅ Système RAG initialisé!")
-            except Exception as e:
-                print(f"❌ Erreur RAG: {e}")
-                self.initialized = False
-        else:
-            self.initialized = False
-    
-    def _build_vector_stores(self):
-        """Construit les vector stores si nécessaire."""
-        world_store_path = Path("./vector_stores/world_lore")
-        if not world_store_path.exists():
-            print("🌍 Construction du vector store du monde...")
-            self.rag_system.build_world_vectorstore()
-        
-        for character_id in CHARACTERS.keys():
-            char_store_path = Path(f"./vector_stores/character_{character_id}")
-            if not char_store_path.exists():
-                print(f"👤 Construction du vector store pour {character_id}...")
-                self.rag_system.build_character_vectorstore(character_id)
-
-    @traceable
-    async def get_character_response(self, character_key: str, user_message: str) -> str:
-        """Obtient une réponse via le système RAG."""
-        if not self.initialized:
-            return "❌ Système RAG non disponible."
-        
-        try:
-            character_data = CHARACTERS[character_key]
-            parsed_input = self.rag_system.parse_actions(user_message)
-            
-            world_context = self.rag_system.retrieve_world_context(parsed_input.text, top_k=3)
-            character_context = self.rag_system.retrieve_character_context(
-                parsed_input.text, character_key, top_k=5
-            )
-            
-            conversation_history = self._get_conversation_history_string(character_key)
-            
-            prompt = self.rag_system.create_character_prompt(
-                character_data=character_data,
-                world_context=world_context,
-                character_context=character_context,
-                parsed_input=parsed_input,
-                conversation_history=conversation_history
-            )
-            
-            response = self.rag_system.llm.invoke(prompt)
-            
-            # Sauvegarde dans l'historique
-            if character_key not in game_state["conversation_history"]:
-                game_state["conversation_history"][character_key] = []
-            
-            game_state["conversation_history"][character_key].extend([
-                {"role": "user", "content": user_message},
-                {"role": "assistant", "content": response}
-            ])
-            
-            # Traitement des actions
-            self._process_character_actions(character_key, response, parsed_input)
-            
-            return response
-            
-        except Exception as e:
-            return f"❌ Erreur RAG: {str(e)}"
-    
-    def _get_conversation_history_string(self, character_key: str, max_messages: int = 6) -> str:
-        """Récupère l'historique formaté."""
-        if character_key not in game_state["conversation_history"]:
-            return ""
-        
-        history = game_state["conversation_history"][character_key]
-        recent_history = history[-max_messages:] if len(history) > max_messages else history
-        
-        formatted_history = []
-        for msg in recent_history:
-            role = "Joueur" if msg["role"] == "user" else CHARACTERS[character_key]["name"]
-            formatted_history.append(f"{role}: {msg['content']}")
-        
-        return "\n".join(formatted_history)
-    
-    def _process_character_actions(self, character_key: str, character_response: str, user_input):
-        """Traite les actions du personnage (version RAG)."""
-        character_data = CHARACTERS[character_key]
-        response_lower = character_response.lower()
-        
-        # Même logique que le système d'agents mais synchrone
-        if character_key == "martine" and character_data.get("can_give_gold"):
-            if any(word in response_lower for word in ["donne", "offre", "voici", "prends"]) and "or" in response_lower:
-                if game_state["player_gold"] < 100:
-                    game_state["player_gold"] += 10
-                    print(f"💰 martine vous a donné 10 pièces d'or!")
-        
-        # Autres actions similaires...
-
-
-def initialize_dialogue_system():
-    """Initialise le système de dialogue (agents ou RAG)."""
-    global graph_manager, rag_system
-    
-    if AGENTS_AVAILABLE:
-        print("🤖 Initialisation du système d'agents LangGraph...")
-        graph_manager = EchoForgeAgentWrapper()
-        return True
-    elif RAG_AVAILABLE:
-        print("📚 Initialisation du système RAG de base...")
-        rag_system = RAGSystemWrapper()
-        return rag_system.initialized
-    else:
-        print("❌ Aucun système de dialogue disponible!")
-        return False
-
-
-async def get_character_response(character_key: str, user_message: str) -> str:
-    """Interface unifiée pour obtenir une réponse de personnage."""
-    
-    if graph_manager:
-        return await graph_manager.get_character_response(character_key, user_message)
-    elif rag_system:
-        return await rag_system.get_character_response(character_key, user_message)
-    else:
-        return "❌ Aucun système de dialogue disponible. Veuillez vérifier la configuration."
+            except:
+                pass
+        return {}
 
 
 def create_character_avatar(emoji: str, size: int = 60, active: bool = False) -> Image.Image:
@@ -394,10 +283,11 @@ def generate_interactive_map(active_character: str = None) -> Image.Image:
         avatar = create_character_avatar(char_data["emoji"], 50, is_active)
         map_img.paste(avatar, (pos["x"]-25, pos["y"]-25), avatar)
     
-    # Ajouter l'avatar du joueur
-    player_avatar = create_character_avatar("🧑", 40)
+    # Ajouter l'avatar du joueur avec la montgolfière 🎈
+    balloon_emoji = "🎈" if not game_state["montgolfiere_repaired"] else "✨"
+    player_avatar = create_character_avatar(balloon_emoji, 60)  # Plus grand pour la montgolfière
     player_pos = game_state["player_position"]
-    map_img.paste(player_avatar, (player_pos["x"]-20, player_pos["y"]-20), player_avatar)
+    map_img.paste(player_avatar, (player_pos["x"]-30, player_pos["y"]-30), player_avatar)
     
     return map_img
 
@@ -476,7 +366,14 @@ def get_game_status() -> str:
     play_time_str = f"{play_time // 60}m {play_time % 60}s"
     
     # Système de dialogue actif
-    dialogue_system = "🤖 Agents LangGraph" if AGENTS_AVAILABLE else ("📚 RAG Basique" if RAG_AVAILABLE else "❌ Aucun")
+    dialogue_system = "🤖 Agents + Mémoire" if AGENTS_AVAILABLE else ("📚 RAG Basique" if RAG_AVAILABLE else "❌ Aucun")
+    
+    # 🆕 Informations de mémoire
+    memory_info = ""
+    if game_state["memory_stats"]:
+        total_messages = sum(stats.get('total_messages', 0) for stats in game_state["memory_stats"].values())
+        total_summaries = sum(stats.get('summaries', 0) for stats in game_state["memory_stats"].values())
+        memory_info = f"\n\n**Mémoire:**\n- 💬 Messages: {total_messages}\n- 📝 Résumés: {total_summaries}"
     
     status = f"""## 🎮 État du Jeu
     
@@ -489,11 +386,36 @@ def get_game_status() -> str:
 
 **Temps de jeu:** {play_time_str}
 
-**Système:** {dialogue_system}
+**Système:** {dialogue_system}{memory_info}
 
 **Objectif:** Réparer votre montgolfière pour quitter l'île !
 """
     return status
+
+
+def get_memory_debug_info() -> str:
+    """🆕 Retourne les informations de debug sur la mémoire."""
+    if not game_state["memory_stats"]:
+        return "## 🧠 Mémoire\n\nAucune conversation active."
+    
+    debug_text = "## 🧠 État de la Mémoire\n\n"
+    
+    for char_id, stats in game_state["memory_stats"].items():
+        char_name = CHARACTERS[char_id]['name']
+        debug_text += f"**{char_name}:**\n"
+        debug_text += f"- Messages: {stats.get('total_messages', 0)}\n"
+        debug_text += f"- Résumés: {stats.get('summaries', 0)}\n"
+        debug_text += f"- Checkpoints: {stats.get('checkpoints', 0)}\n"
+        debug_text += f"- Dernière activité: {stats.get('last_activity', 'N/A')}\n\n"
+    
+    # Configuration mémoire
+    memory_config = config.get_memory_config()
+    debug_text += f"\n**Configuration:**\n"
+    debug_text += f"- Auto-résumé après: {memory_config['max_messages_without_summary']} msgs\n"
+    debug_text += f"- Messages gardés: {memory_config['keep_recent_messages']}\n"
+    debug_text += f"- Sauvegarde auto: {'✅' if memory_config['auto_backup_messages'] else '❌'}\n"
+    
+    return debug_text
 
 
 def get_debug_info() -> str:
@@ -510,12 +432,13 @@ def get_debug_info() -> str:
         debug_text += f"**{i}. {timestamp}** - {event['character'].title()}\n"
         debug_text += f"   - Message: {event['user_message'][:50]}...\n"
         debug_text += f"   - Complexité: {event['complexity']}\n"
-        debug_text += f"   - RAG: {'✅' if event['rag_used'] else '❌'}\n\n"
+        debug_text += f"   - RAG: {'✅' if event['rag_used'] else '❌'}\n"
+        debug_text += f"   - Résumé mémoire: {'✅' if event.get('memory_summarized', False) else '❌'}\n\n"
     
     return debug_text
 
 
-def reset_game() -> Tuple[List, str, Image.Image, str]:
+def reset_game() -> Tuple[List, str, Image.Image, str, str]:
     """Remet à zéro le jeu."""
     global game_state
     
@@ -534,14 +457,43 @@ def reset_game() -> Tuple[List, str, Image.Image, str]:
         "player_position": BALLOON_POSITION.copy(),
         "chat_open": False,
         "game_events": [],
-        "start_time": time.time()
+        "start_time": time.time(),
+        "memory_stats": {}
     }
     
-    return [], get_game_status(), generate_interactive_map(), get_debug_info()
+    return [], get_game_status(), generate_interactive_map(), get_debug_info(), get_memory_debug_info()
+
+
+def initialize_dialogue_system():
+    """Initialise le système de dialogue (agents ou RAG)."""
+    global graph_manager, rag_system
+    
+    if AGENTS_AVAILABLE:
+        print("🤖 Initialisation du système d'agents LangGraph avec mémoire avancée...")
+        graph_manager = EchoForgeAgentWrapper()
+        return True
+    elif RAG_AVAILABLE:
+        print("📚 Initialisation du système RAG de base...")
+        # Code du RAGSystemWrapper ici si nécessaire
+        return False
+    else:
+        print("❌ Aucun système de dialogue disponible!")
+        return False
+
+
+async def get_character_response(character_key: str, user_message: str) -> str:
+    """Interface unifiée pour obtenir une réponse de personnage."""
+    
+    if graph_manager:
+        return await graph_manager.get_character_response(character_key, user_message)
+    elif rag_system:
+        return await rag_system.get_character_response(character_key, user_message)
+    else:
+        return "❌ Aucun système de dialogue disponible. Veuillez vérifier la configuration."
 
 
 def create_interface():
-    """Crée l'interface Gradio avec agents intégrés."""
+    """Crée l'interface Gradio avec agents et mémoire avancée."""
     
     theme = gr.themes.Soft(
         primary_hue="blue",
@@ -549,20 +501,20 @@ def create_interface():
         neutral_hue="slate",
     )
     
-    with gr.Blocks(theme=theme, title="🎈 EchoForge - Agents LangGraph") as demo:
+    with gr.Blocks(theme=theme, title="🎈 EchoForge - Mémoire Avancée") as demo:
         
         # Variables d'état pour l'interface
         chat_visible = gr.State(False)
         current_char = gr.State("")
         
         # En-tête
-        system_info = "🤖 LangGraph" if AGENTS_AVAILABLE else ("📚 RAG" if RAG_AVAILABLE else "❌ Aucun")
+        system_info = "🤖 LangGraph + Mémoire" if AGENTS_AVAILABLE else ("📚 RAG" if RAG_AVAILABLE else "❌ Aucun")
         
         gr.HTML(f"""
         <div style="text-align: center; padding: 20px;">
-            <h1>🎈 EchoForge - Agents Intelligents</h1>
+            <h1>🎈 EchoForge - Agents Intelligents avec Mémoire Avancée</h1>
             <h3>Système: {system_info} | Cliquez sur les personnages pour leur parler</h3>
-            <p><em>Personnages avec IA avancée et routage conditionnel RAG</em></p>
+            <p><em>Personnages avec IA avancée, mémoire persistante et résumés automatiques</em></p>
         </div>
         """)
         
@@ -580,7 +532,7 @@ def create_interface():
                 map_image = gr.Image(
                     value=generate_interactive_map(),
                     interactive=True,
-                    label="Carte de l'île - Cliquez sur les personnages",
+                    label="🎈 Carte de l'île - Votre montgolfière est endommagée!",
                     show_label=True,
                     height=480
                 )
@@ -591,7 +543,7 @@ def create_interface():
                     character_title = gr.Markdown("## Conversation", visible=False)
                     
                     chatbot = gr.Chatbot(
-                        label="Conversation avec IA avancée",
+                        label="Conversation avec IA avancée et mémoire",
                         height=300,
                         show_label=True,
                         container=True,
@@ -601,7 +553,7 @@ def create_interface():
                     with gr.Row():
                         msg = gr.Textbox(
                             label="Votre message",
-                            placeholder="Tapez votre message... (L'IA décidera automatiquement si elle a besoin du RAG)",
+                            placeholder="Tapez votre message... (L'IA se souvient de vos conversations précédentes)",
                             lines=2,
                             scale=4
                         )
@@ -617,38 +569,35 @@ def create_interface():
                 # État du jeu
                 game_status = gr.Markdown(get_game_status())
                 
-                gr.Markdown("---")
-                
-                # Guide des personnages
-                personality_info = f"""
-                ## 👥 Personnages IA
-                
-                **👑 martine** - Maire  
-                *Donne de l'or, connaît les secrets*  
-                Traits: Leadership {CHARACTERS['martine']['personality']['traits']['leadership']}, Curiosité {CHARACTERS['martine']['personality']['traits']['curiosity']}
-                
-                **🔨 Claude** - Forgeron  
-                *Répare la montgolfière contre des cookies*  
-                Traits: Pragmatisme {CHARACTERS['claude']['personality']['traits']['pragmatism']}, Artisanat {CHARACTERS['claude']['personality']['traits']['craftsmanship']}
-                
-                **✂️ Azzedine** - Styliste  
-                *Vend du tissu contre de l'or*  
-                Traits: Créativité {CHARACTERS['azzedine']['personality']['traits']['creativity']}, Perfectionnisme {CHARACTERS['azzedine']['personality']['traits']['perfectionism']}
-                
-                **👩‍🍳 Roberte** - Cuisinière  
-                *Donne des cookies pendant ses pauses*  
-                Traits: Générosité {CHARACTERS['roberte']['personality']['traits']['generosity']}, Chaleur {CHARACTERS['roberte']['personality']['traits']['warmth']}
-                
-                💡 **IA Avancée:** Chaque personnage utilise des agents intelligents qui décident automatiquement quand chercher des informations !
-                """
-                
-                gr.Markdown(personality_info)
-                
-                gr.Markdown("---")
-                
-                # Informations de debug (si activées)
-                if os.getenv('ECHOFORGE_DEBUG', 'false').lower() == 'true':
-                    debug_info = gr.Markdown(get_debug_info(), label="Debug Info")
+                # Tabs pour les différentes infos
+                with gr.Tabs():
+                    with gr.TabItem("👥 Personnages"):
+                        personality_info = f"""
+**👑 martine** - Maire  
+*Donne de l'or, connaît les secrets*  
+Traits: Leadership {CHARACTERS['martine']['personality']['traits']['leadership']}, Curiosité {CHARACTERS['martine']['personality']['traits']['curiosity']}
+
+**🔨 Claude** - Forgeron  
+*Répare la montgolfière contre des cookies*  
+Traits: Pragmatisme {CHARACTERS['claude']['personality']['traits']['pragmatism']}, Artisanat {CHARACTERS['claude']['personality']['traits']['craftsmanship']}
+
+**✂️ Azzedine** - Styliste  
+*Vend du tissu contre de l'or*  
+Traits: Créativité {CHARACTERS['azzedine']['personality']['traits']['creativity']}, Perfectionnisme {CHARACTERS['azzedine']['personality']['traits']['perfectionism']}
+
+**👩‍🍳 Roberte** - Cuisinière  
+*Donne des cookies pendant ses pauses*  
+Traits: Générosité {CHARACTERS['roberte']['personality']['traits']['generosity']}, Chaleur {CHARACTERS['roberte']['personality']['traits']['warmth']}
+
+💡 **IA Avancée:** Les personnages gardent en mémoire vos interactions!
+"""
+                        gr.Markdown(personality_info)
+                    
+                    with gr.TabItem("🧠 Mémoire"):
+                        memory_info = gr.Markdown(get_memory_debug_info())
+                    
+                    with gr.TabItem("🐛 Debug"):
+                        debug_info = gr.Markdown(get_debug_info())
                 
                 # Boutons d'action
                 with gr.Column():
@@ -663,7 +612,7 @@ def create_interface():
             """Met à jour la visibilité du chat."""
             if visible and char_id:
                 char_data = CHARACTERS[char_id]
-                system_type = "🤖 Agent LangGraph" if AGENTS_AVAILABLE else "📚 RAG"
+                system_type = "🤖 Agent + Mémoire" if AGENTS_AVAILABLE else "📚 RAG"
                 title = f"## 💬 {system_type} - {char_data['emoji']} {char_data['name']}"
                 return {
                     chat_container: gr.update(visible=True),
@@ -677,17 +626,9 @@ def create_interface():
                     instruction_msg: gr.update(visible=True)
                 }
         
-        def reinitialize_system():
-            """Réinitialise le système de dialogue."""
-            success = initialize_dialogue_system()
-            status = get_game_status()
-            
-            if success:
-                status += "\n\n✅ Système réinitialisé avec succès !"
-            else:
-                status += "\n\n❌ Échec de la réinitialisation."
-            
-            return status
+        def refresh_all_stats():
+            """Actualise toutes les statistiques."""
+            return get_game_status(), get_memory_debug_info(), get_debug_info()
         
         def toggle_debug_mode():
             """Active/désactive le mode debug."""
@@ -698,7 +639,7 @@ def create_interface():
             status = get_game_status()
             status += f"\n\n🐛 Mode debug: {'✅ Activé' if new_value == 'true' else '❌ Désactivé'}"
             
-            return status, get_debug_info() if new_value == 'true' else ""
+            return status, get_memory_debug_info(), get_debug_info()
         
         # Connexions des événements
         map_image.select(
@@ -715,8 +656,8 @@ def create_interface():
             inputs=[msg, chatbot, current_char],
             outputs=[chatbot, msg]
         ).then(
-            lambda: get_game_status(),
-            outputs=[game_status]
+            refresh_all_stats,
+            outputs=[game_status, memory_info, debug_info]
         )
         
         send_btn.click(
@@ -724,8 +665,8 @@ def create_interface():
             inputs=[msg, chatbot, current_char],
             outputs=[chatbot, msg]
         ).then(
-            lambda: get_game_status(),
-            outputs=[game_status]
+            refresh_all_stats,
+            outputs=[game_status, memory_info, debug_info]
         )
         
         close_chat_btn.click(
@@ -740,72 +681,42 @@ def create_interface():
         clear_chat_btn.click(lambda: [], outputs=[chatbot])
         
         refresh_btn.click(
-            lambda: get_game_status(),
-            outputs=[game_status]
+            refresh_all_stats,
+            outputs=[game_status, memory_info, debug_info]
         )
         
-        # Reset avec mise à jour du debug si activé
-        if os.getenv('ECHOFORGE_DEBUG', 'false').lower() == 'true':
-            reset_btn.click(
-                reset_game,
-                outputs=[chatbot, game_status, map_image, debug_info]
-            ).then(
-                lambda: (False, "", []),
-                outputs=[chat_visible, current_char, chatbot]
-            ).then(
-                update_chat_visibility,
-                inputs=[chat_visible, current_char],
-                outputs=[chat_container, character_title, instruction_msg]
-            )
-        else:
-            reset_btn.click(
-                lambda: reset_game()[:3],  # Ignore debug output
-                outputs=[chatbot, game_status, map_image]
-            ).then(
-                lambda: (False, "", []),
-                outputs=[chat_visible, current_char, chatbot]
-            ).then(
-                update_chat_visibility,
-                inputs=[chat_visible, current_char],
-                outputs=[chat_container, character_title, instruction_msg]
-            )
+        reset_btn.click(
+            reset_game,
+            outputs=[chatbot, game_status, map_image, debug_info, memory_info]
+        ).then(
+            lambda: (False, "", []),
+            outputs=[chat_visible, current_char, chatbot]
+        ).then(
+            update_chat_visibility,
+            inputs=[chat_visible, current_char],
+            outputs=[chat_container, character_title, instruction_msg]
+        )
         
         # Toggle debug button (seulement si agents disponibles)
         if AGENTS_AVAILABLE:
-            if os.getenv('ECHOFORGE_DEBUG', 'false').lower() == 'true':
-                toggle_debug_btn.click(
-                    toggle_debug_mode,
-                    outputs=[game_status, debug_info]
-                )
-            else:
-                toggle_debug_btn.click(
-                    lambda: toggle_debug_mode()[0],  # Juste le status
-                    outputs=[game_status]
-                )
+            toggle_debug_btn.click(
+                toggle_debug_mode,
+                outputs=[game_status, memory_info, debug_info]
+            )
         
         # Instructions
-        system_description = """
-        🤖 **Système d'Agents LangGraph** - Chaque personnage utilise un agent intelligent qui :
-        - 🧠 Analyse automatiquement la complexité de votre message
-        - 🔍 Décide s'il a besoin de chercher des informations (RAG)
-        - ⚡ Optimise la vitesse de réponse selon le contexte
-        - 💾 Maintient une mémoire persistante des conversations
-        - 🎭 Adapte sa personnalité et ses émotions dynamiquement
-        """ if AGENTS_AVAILABLE else """
-        📚 **Système RAG de Base** - Utilise le système de recherche d'informations classique
-        """
-        
         gr.HTML(f"""
         <div style="text-align: center; padding: 20px; margin-top: 20px; background-color: #f0f0f0; border-radius: 10px;">
-            <h4>🎯 Comment jouer avec l'IA avancée</h4>
-            <p><strong>1.</strong> Cliquez sur les avatars des personnages (emojis) sur la carte</p>
-            <p><strong>2.</strong> Dialoguez naturellement - l'IA s'adapte automatiquement</p>
-            <p><strong>3.</strong> Posez des questions complexes pour déclencher le RAG</p>
-            <p><strong>4.</strong> Négociez intelligemment pour obtenir les ressources</p>
-            <p><strong>5.</strong> Réparez votre montgolfière pour quitter l'île !</p>
+            <h4>🎯 Comment jouer avec l'IA avancée et mémoire</h4>
+            <p><strong>1.</strong> Votre montgolfière 🎈 est endommagée au centre de la carte</p>
+            <p><strong>2.</strong> Cliquez sur les personnages pour dialoguer</p>
+            <p><strong>3.</strong> L'IA se souvient de toutes vos conversations passées</p>
+            <p><strong>4.</strong> Les conversations longues sont automatiquement résumées</p>
+            <p><strong>5.</strong> Collectez les ressources pour réparer votre montgolfière !</p>
             <hr>
-            {system_description}
-            <p><em>💡 Activez le mode debug pour voir le fonctionnement interne de l'IA !</em></p>
+            <p>🧠 <strong>Mémoire Avancée:</strong> Les personnages gardent un historique complet avec résumés automatiques après {config.max_messages_without_summary} messages</p>
+            <p>💾 <strong>Sauvegarde:</strong> Toutes les conversations sont sauvegardées et peuvent être reprises</p>
+            <p><em>💡 Consultez l'onglet "Mémoire" pour voir l'état de la mémoire des personnages !</em></p>
         </div>
         """)
     
@@ -813,46 +724,42 @@ def create_interface():
 
 
 def main():
-    """Lance l'application avec le système d'agents intégré."""
+    """Lance l'application avec le système d'agents et mémoire avancée."""
     
-    print("🎈 Démarrage d'EchoForge avec Agents LangGraph...")
+    print("🎈 Démarrage d'EchoForge avec Agents LangGraph et Mémoire Avancée...")
+    print("=" * 60)
+    print(config.debug_info())
     print("=" * 60)
     
     # Vérification des systèmes disponibles
     if AGENTS_AVAILABLE:
-        print("✅ Système d'agents LangGraph disponible")
+        print("✅ Système d'agents LangGraph avec mémoire avancée disponible")
     elif RAG_AVAILABLE:
         print("⚠️ Fallback vers le système RAG de base")
     else:
         print("❌ Aucun système de dialogue disponible")
         print("Vérifiez l'installation des dépendances:")
-        print("  pip install langgraph==0.5.1 langchain>=0.3.0")
+        print("  pip install langgraph langchain langchain-community")
         return
     
     # Initialisation du système de dialogue
     if not initialize_dialogue_system():
         print("❌ Impossible d'initialiser le système de dialogue.")
-        print("Vérifiez que:")
-        print("  - Ollama est installé et en cours d'exécution")
-        print("  - Les modèles sont disponibles")
-        print("  - Le dossier ./data contient les données")
         return
     
     print("✅ Système de dialogue initialisé avec succès !")
-    print("🎮 Lancement de l'interface...")
+    print("🎮 Lancement de l'interface avec support mémoire avancée...")
     
     # Création et lancement de l'interface
     demo = create_interface()
     
     # Configuration du lancement
     demo.launch(
-        server_name="0.0.0.0",
-        server_port=7860,
-        share=False,
-        debug=AGENTS_AVAILABLE,  # Debug activé seulement avec les agents
-        show_error=True,
-        favicon_path=None,
-        auth=None
+        server_name=config.gradio_server_name,
+        server_port=config.gradio_server_port,
+        share=config.gradio_share,
+        debug=config.debug,
+        show_error=True
     )
 
 

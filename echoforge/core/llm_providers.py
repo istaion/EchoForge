@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Union
 from langchain_groq import ChatGroq
 from langchain.schema import AIMessage
+from langchain_core.language_models.base import BaseLanguageModel
 try:
     from langchain_ollama import OllamaLLM, ChatOllama
 except ImportError:
@@ -19,6 +20,11 @@ class LLMProvider(ABC):
     @abstractmethod
     def get_model_info(self) -> Dict[str, Any]:
         """Retourne les informations sur le modèle"""
+        pass
+    
+    @abstractmethod
+    def get_langchain_llm(self) -> BaseLanguageModel:
+        """Retourne l'objet LLM LangChain natif"""
         pass
 
 
@@ -52,10 +58,14 @@ class OllamaProvider(LLMProvider):
             "model": self.model_name,
             "temperature": self.temperature
         }
+    
+    def get_langchain_llm(self) -> BaseLanguageModel:
+        """Retourne l'objet LLM LangChain natif"""
+        return self.llm
 
 
 class GroqProvider(LLMProvider):
-    """Provider LLM utilisant Groq (pour intégration future)"""
+    """Provider LLM utilisant Groq"""
     
     def __init__(self, api_key: str, model: str = "llama-3.1-8b-instant",
                  temperature: float = 0.7):
@@ -88,6 +98,10 @@ class GroqProvider(LLMProvider):
             "model": self.model_name,
             "temperature": self.temperature
         }
+    
+    def get_langchain_llm(self) -> BaseLanguageModel:
+        """Retourne l'objet LLM LangChain natif"""
+        return self.llm
 
 
 class LLMManager:
@@ -101,12 +115,23 @@ class LLMManager:
         self.config = config
         provider = self.config.llm_provider
         if provider == "groq":
-            self.provider = GroqProvider(self.config.groq_api_key)
+            self.provider = GroqProvider(
+                api_key=self.config.groq_api_key,
+                model=self.config.llm_model,
+                temperature=self.config.llm_temperature
+            )
         else:
-            self.provider = OllamaProvider()
+            self.provider = OllamaProvider(
+                model=self.config.llm_model,
+                temperature=self.config.llm_temperature
+            )
 
-    def get_llm(self) -> LLMProvider:
-        """Retourne le provider LLM actuel"""
+    def get_llm(self) -> BaseLanguageModel:
+        """Retourne le LLM LangChain pour compatibilité avec LangChain"""
+        return self.provider.get_langchain_llm()
+    
+    def get_provider(self) -> LLMProvider:
+        """Retourne le provider LLM complet"""
         return self.provider
     
     def set_provider(self, provider: LLMProvider):

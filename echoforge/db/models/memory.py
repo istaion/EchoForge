@@ -1,0 +1,82 @@
+from sqlmodel import SQLModel, Field, Column
+from sqlalchemy import DateTime, Text, JSON
+from datetime import datetime
+from typing import Optional, Dict, Any
+
+
+class ConversationSummary(SQLModel, table=True):
+    """Résumés de conversations stockés en base."""
+    
+    __tablename__ = "conversation_summaries"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    
+    # Identifiants
+    character_name: str = Field(index=True, description="Nom du personnage")
+    thread_id: str = Field(index=True, description="ID du thread de conversation")
+    session_id: Optional[str] = Field(default=None, index=True, description="ID de session utilisateur")
+    
+    # Contenu du résumé
+    summary_text: str = Field(sa_column=Column(Text), description="Texte du résumé")
+    summary_metadata: Dict[str, Any] = Field(
+        default_factory=dict, 
+        sa_column=Column(JSON),
+        description="Métadonnées du résumé"
+    )
+    
+    # Informations sur la période résumée
+    messages_count: int = Field(description="Nombre de messages résumés")
+    start_timestamp: datetime = Field(description="Début de la période résumée")
+    end_timestamp: datetime = Field(description="Fin de la période résumée")
+    
+    # Trigger qui a causé le résumé
+    trigger_type: str = Field(description="Type de déclencheur: 'bye' ou 'auto'")
+    trigger_metadata: Dict[str, Any] = Field(
+        default_factory=dict,
+        sa_column=Column(JSON),
+        description="Métadonnées du déclencheur"
+    )
+    
+    # Timestamps système
+    created_at: datetime = Field(
+        default_factory=datetime.utcnow,
+        sa_column=Column(DateTime(timezone=True))
+    )
+    updated_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True))
+    )
+
+
+class ConversationMessage(SQLModel, table=True):
+    """Messages de conversation pour backup et analyse."""
+    
+    __tablename__ = "conversation_messages"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    
+    # Identifiants
+    character_name: str = Field(index=True)
+    thread_id: str = Field(index=True)
+    session_id: Optional[str] = Field(default=None, index=True)
+    
+    # Contenu du message
+    role: str = Field(description="'user' ou 'assistant'")
+    content: str = Field(sa_column=Column(Text))
+    message_metadata: Dict[str, Any] = Field(
+        default_factory=dict,
+        sa_column=Column(JSON)
+    )
+    
+    # Ordre dans la conversation
+    sequence_number: int = Field(description="Numéro de séquence dans la conversation")
+    
+    # Statut
+    is_summarized: bool = Field(default=False, description="Message inclus dans un résumé")
+    summary_id: Optional[int] = Field(default=None, foreign_key="conversation_summaries.id")
+    
+    # Timestamps
+    created_at: datetime = Field(
+        default_factory=datetime.utcnow,
+        sa_column=Column(DateTime(timezone=True))
+    )
