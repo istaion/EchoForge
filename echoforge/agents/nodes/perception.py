@@ -39,6 +39,7 @@ Répond uniquement avec un objet JSON au format :
 """
         
         result = llm_manager.invoke(prompt)
+        result = extract_json_block(str(result))
         
         try:
             trigger_probs = json.loads(result)
@@ -134,7 +135,8 @@ Répond uniquement avec un objet JSON de ce format :
 
         try:
             raw_output = llm_manager.invoke(prompt)
-            trigger_outputs = json.loads(raw_output)
+            clean_output = extract_json_block(str(raw_output))
+            trigger_outputs = json.loads(clean_output)
         except Exception as e:
             state["debug_info"]["output_trigger_parser_error"] = str(e)
             trigger_outputs = {k: {"prob": 0.0} for k in output_triggers}
@@ -225,30 +227,22 @@ def _analyze_message_intent(message: str) -> str:
     return "general"
 
 
-# def _assess_initial_complexity(message: str, intent: str) -> ComplexityLevel:
-#     """Évalue la complexité initiale du message."""
-#     message_lower = message.lower()
-    
-#     # Patterns simples (réponses cachées/automatiques)
-#     simple_patterns = [
-#         "bonjour", "salut", "merci", "de rien", "oui", "non", 
-#         "d'accord", "ok", "ça va", "hello"
-#     ]
-    
-#     # Patterns complexes (nécessitent réflexion/RAG)
-#     complex_patterns = [
-#         "raconte", "explique", "histoire", "pourquoi", "comment",
-#         "secret", "relation", "passé", "souvenir", "événement"
-#     ]
-    
-#     # Vérification longueur
-#     word_count = len(message.split())
-    
-#     # Classification
-#     if any(pattern in message_lower for pattern in simple_patterns) and word_count <= 3:
-#         return ComplexityLevel.SIMPLE
-    
-#     if word_count > 15:
-#         return ComplexityLevel.COMPLEX
-    
-#     return ComplexityLevel.MEDIUM
+def extract_json_block(text: str) -> str:
+    """
+    Extrait le contenu JSON entre la première accolade ouvrante { et
+    la dernière accolade fermante }, même si le texte a des préfixes ou suffixes.
+
+    Args:
+        text: Le texte brut retourné par le LLM.
+
+    Returns:
+        Une chaîne contenant le JSON extrait, ou une chaîne vide si non trouvée.
+    """
+    try:
+        # Match non-gourmand entre { et }
+        match = re.search(r"\{.*\}", text, re.DOTALL)
+        if match:
+            return match.group(0)
+    except Exception as e:
+        print(f"⚠️ Erreur lors de l'extraction JSON: {e}")
+    return ""

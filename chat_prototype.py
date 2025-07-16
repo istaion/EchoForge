@@ -271,7 +271,7 @@ game_state = {
     "session_initialized": False
 }
 
-# Synchronisation avec les données joueur
+# Synchronisation avec les données joueur - 🆕 Ajout de l'alcool
 def sync_game_state_with_player_data():
     """Synchronise game_state avec CURRENT_PLAYER_DATA"""
     if CURRENT_PLAYER_DATA:
@@ -279,6 +279,7 @@ def sync_game_state_with_player_data():
             "player_gold": CURRENT_PLAYER_DATA["player_stats"]["gold"],
             "player_cookies": CURRENT_PLAYER_DATA["player_stats"]["cookies"], 
             "player_fabric": CURRENT_PLAYER_DATA["player_stats"]["fabric"],
+            "player_alcool": CURRENT_PLAYER_DATA["player_stats"]["alcool"],  
             "montgolfiere_repaired": CURRENT_PLAYER_DATA["montgolfiere_status"]["fully_operational"]
         })
 
@@ -580,8 +581,9 @@ class EchoForgeAgentWrapper:
             character_name = CHARACTERS[character_key].get('name', character_key)
             return f"*{character_name} semble troublé*\n\nExcusez-moi, je rencontre des difficultés techniques. Pouvez-vous reformuler votre message ?\n\n🔧 Erreur: {str(e)}"
     
+    # 🆕 Fonction mise à jour pour gérer tous les nouveaux triggers
     async def _process_agent_actions(self, character_key: str, result: dict, user_message: str):
-        """Traite les actions spéciales basées sur la réponse de l'agent."""
+        """Traite les actions spéciales basées sur la réponse de l'agent avec tous les nouveaux triggers."""
         global CURRENT_PLAYER_DATA
         
         character_data = CHARACTERS[character_key]
@@ -616,6 +618,7 @@ class EchoForgeAgentWrapper:
                 
                 # Actions spécifiques par trigger
                 try:
+                    # === Triggers d'actions existantes ===
                     if trigger_name == "give_gold" and character_key == "martine":
                         await self._give_gold(value if isinstance(value, (int, float)) and value > 0 else 10)
                     elif trigger_name == "give_cookies" and character_key == "roberte":
@@ -624,6 +627,39 @@ class EchoForgeAgentWrapper:
                         await self._sell_fabric()
                     elif trigger_name == "fix_mongolfière" and character_key == "claude":
                         await self._repair_balloon()
+                    
+                    # === 🆕 Nouveaux triggers d'alcool ===
+                    elif trigger_name == "give_alcool":
+                        if character_key == "claude":
+                            await self._give_alcool(value if isinstance(value, (int, float)) and value > 0 else 2)
+                    elif character_key == "martine":  # 🆕 Gestion pour Martine
+                        await self._give_alcool(value if isinstance(value, (int, float)) and value > 0 else 1)
+                        # 🆕 Martine devient saoule
+                        CHARACTERS[character_key]["personality"]['current_alcohol_level'] = "drunk"
+                        print(f"🍷 Martine a bu et est maintenant saoule!")
+                    
+                    # === 🆕 Triggers de quêtes ===
+                    elif trigger_name.startswith("quest_"):
+                        await self._discover_quest(trigger_name, character_key, prob)
+                    
+                    # === 🆕 Triggers de réparation ===
+                    elif trigger_name == "repair_montgolfiere":
+                        await self._repair_balloon()
+                        # 🆕 Complétion de la quête cookies pour Claude
+                        CURRENT_PLAYER_DATA["quests"]["sub_quests"]["find_cookies_for_claude"]["completed"] = True
+                        CURRENT_PLAYER_DATA["quests"]["sub_quests"]["find_cookies_for_claude"]["active"] = False
+                        print("✅ Quête 'find_cookies_for_claude' complétée!")
+                        # Vérifier si la quête principale peut être complétée
+                        await self._check_main_quest_completion()
+                    elif trigger_name == "fabric_repair":
+                        await self._sew_fabric()
+                        # 🆕 Complétion de la quête or pour Azzedine
+                        CURRENT_PLAYER_DATA["quests"]["sub_quests"]["find_gold_for_azzedine"]["completed"] = True
+                        CURRENT_PLAYER_DATA["quests"]["sub_quests"]["find_gold_for_azzedine"]["active"] = False
+                        print("✅ Quête 'find_gold_for_azzedine' complétée!")
+                        # Vérifier si la quête principale peut être complétée
+                        await self._check_main_quest_completion()
+                        
                 except Exception as e:
                     print(f"❌ Erreur lors de l'exécution du trigger {trigger_name}: {e}")
         
@@ -632,6 +668,7 @@ class EchoForgeAgentWrapper:
             event = {
                 "timestamp": time.time(),
                 "session_id": game_state.get("current_session_id"),
+                "type": "conversation",  # 🆕 Ajout du type pour cohérence
                 "character": character_key,
                 "user_message": user_message,
                 "response_summary": result.get('response', '')[:100] + "...",
@@ -649,6 +686,76 @@ class EchoForgeAgentWrapper:
                 game_state["game_events"] = game_state["game_events"][-50:]
         except Exception as e:
             print(f"⚠️ Erreur lors de l'enregistrement de l'événement: {e}")
+    
+    # === 🆕 Nouvelles fonctions d'action ===
+    
+    async def _give_alcool(self, amount: int = 2):
+        """Donne de l'alcool au joueur."""
+        CURRENT_PLAYER_DATA["player_stats"]["alcool"] += amount
+        game_state["player_alcool"] = CURRENT_PLAYER_DATA["player_stats"]["alcool"]
+        print(f"🍷 +{amount} alcool! Total: {CURRENT_PLAYER_DATA['player_stats']['alcool']}")
+    
+    async def _discover_quest(self, quest_trigger: str, character_key: str, probability: float):
+        """Découvre une quête basée sur le trigger."""
+        quest_discovered = False
+        
+        if quest_trigger == "quest_main_001_claude":
+            if not CURRENT_PLAYER_DATA["quests"]["sub_quests"]["find_cookies_for_claude"]["discovered"]:
+                CURRENT_PLAYER_DATA["quests"]["sub_quests"]["find_cookies_for_claude"]["discovered"] = True
+                CURRENT_PLAYER_DATA["quests"]["sub_quests"]["find_cookies_for_claude"]["active"] = True
+                quest_discovered = True
+                print("🎯 Quête découverte: Trouver des cookies pour Claude")
+        
+        elif quest_trigger == "quest_main_001_azzedine":
+            if not CURRENT_PLAYER_DATA["quests"]["sub_quests"]["find_gold_for_azzedine"]["discovered"]:
+                CURRENT_PLAYER_DATA["quests"]["sub_quests"]["find_gold_for_azzedine"]["discovered"] = True
+                CURRENT_PLAYER_DATA["quests"]["sub_quests"]["find_gold_for_azzedine"]["active"] = True
+                quest_discovered = True
+                print("🎯 Quête découverte: Trouver de l'or pour Azzedine")
+        
+        elif quest_trigger == "quest_side_001":
+            if not CURRENT_PLAYER_DATA["quests"]["side_quests"]["find_island_treasure"]["discovered"]:
+                CURRENT_PLAYER_DATA["quests"]["side_quests"]["find_island_treasure"]["discovered"] = True
+                CURRENT_PLAYER_DATA["quests"]["side_quests"]["find_island_treasure"]["active"] = True
+                quest_discovered = True
+                print("🎯 Quête découverte: Découvrir le trésor de l'île")
+        
+        elif quest_trigger == "quest_side_001_position":
+            # Révélation de l'emplacement du trésor
+            treasure_quest = CURRENT_PLAYER_DATA["quests"]["side_quests"]["find_island_treasure"]
+            if treasure_quest["discovered"] and not treasure_quest["completion_conditions"]["treasure_location_discovered"]:
+                treasure_quest["completion_conditions"]["treasure_location_discovered"] = True
+                treasure_quest["progress"] = 1
+                quest_discovered = True
+                print("🗺️ Emplacement du trésor révélé!")
+        
+        if quest_discovered:
+            # Met à jour les événements de jeu pour notifier la découverte
+            game_state["game_events"].append({
+                "timestamp": time.time(),
+                "session_id": game_state.get("current_session_id"),
+                "type": "quest_discovery",
+                "quest_trigger": quest_trigger,
+                "character": character_key,
+                "probability": probability
+            })
+    
+    async def _sew_fabric(self):
+        """Coud le tissu de la montgolfière."""
+        if CURRENT_PLAYER_DATA["player_stats"]["fabric"] >= 1:
+            CURRENT_PLAYER_DATA["player_stats"]["fabric"] -= 1
+            CURRENT_PLAYER_DATA["montgolfiere_status"]["fabric_sewn"] = True
+            
+            # Vérifie si la montgolfière est complètement réparée
+            if (CURRENT_PLAYER_DATA["montgolfiere_status"]["motor_repaired"] and 
+                CURRENT_PLAYER_DATA["montgolfiere_status"]["fabric_sewn"]):
+                CURRENT_PLAYER_DATA["montgolfiere_status"]["fully_operational"] = True
+                CURRENT_PLAYER_DATA["quests"]["main_quests"]["repair_montgolfiere"]["completed"] = True
+            
+            sync_game_state_with_player_data()
+            print(f"🧵 Tissu cousu! Montgolfière: {'✅ Réparée' if CURRENT_PLAYER_DATA['montgolfiere_status']['fully_operational'] else '🔧 En cours'}")
+    
+    # === Fonctions existantes mises à jour ===
     
     async def _give_gold(self, amount: int = 10):
         """Donne de l'or au joueur."""
@@ -700,6 +807,38 @@ class EchoForgeAgentWrapper:
             sync_game_state_with_player_data()
             
             print(f"🎈 Montgolfière complètement réparée! Vous pouvez repartir!")
+
+    async def _check_main_quest_completion(self):
+        """Vérifie et met à jour la complétion de la quête principale."""
+        # Vérifier si les deux sous-quêtes sont complétées
+        cookies_completed = CURRENT_PLAYER_DATA["quests"]["sub_quests"]["find_cookies_for_claude"]["completed"]
+        gold_completed = CURRENT_PLAYER_DATA["quests"]["sub_quests"]["find_gold_for_azzedine"]["completed"]
+        
+        if cookies_completed and gold_completed:
+            # Marquer la quête principale comme complétée
+            CURRENT_PLAYER_DATA["quests"]["main_quests"]["repair_montgolfiere"]["completed"] = True
+            CURRENT_PLAYER_DATA["quests"]["main_quests"]["repair_montgolfiere"]["active"] = False
+            CURRENT_PLAYER_DATA["quests"]["main_quests"]["repair_montgolfiere"]["progress"] = 2  # Max progress
+            
+            # Marquer la montgolfière comme complètement réparée
+            CURRENT_PLAYER_DATA["montgolfiere_status"]["fully_operational"] = True
+            sync_game_state_with_player_data()
+            
+            print("🎉 QUÊTE PRINCIPALE COMPLÉTÉE! La montgolfière est entièrement réparée!")
+            
+            # Ajouter un événement spécial
+            game_state["game_events"].append({
+                "timestamp": time.time(),
+                "session_id": game_state.get("current_session_id"),
+                "type": "quest_completion",
+                "quest_id": "repair_montgolfiere",
+                "description": "Quête principale complétée - Montgolfière réparée!"
+            })
+            
+            # 🆕 Sauvegarde automatique lors de la complétion de la quête principale
+            if game_state.get("current_session_id"):
+                save_complete_session(game_state["current_session_id"])
+                print("💾 Sauvegarde automatique complète déclenchée par complétion de quête!")
 
 
 def create_character_avatar(emoji: str, size: int = 60, active: bool = False) -> Image.Image:
@@ -847,12 +986,13 @@ def handle_new_session(session_name: str = None) -> Tuple[str, gr.update, str, I
     
     return (
         message,
-        gr.update(visible=False),   # Cache la sélection de session
+        gr.update(visible=False),
         session_info,
         generate_interactive_map(),
-        gr.update(visible=True),    # Montre l'interface de jeu
+        gr.update(visible=False), 
         get_game_status(),
-        get_memory_debug_info()
+        get_memory_debug_info(),
+        True  # show_intro_screen: actif
     )
 
 
@@ -946,6 +1086,7 @@ def close_chat() -> Tuple[bool, List, str, Image.Image, bool, bool]:
     return False, [], "", generate_interactive_map(), True, False
 
 
+# 🆕 Fonction mise à jour pour inclure l'alcool
 def get_game_status() -> str:
     """Retourne l'état actuel du jeu."""
     if not CURRENT_PLAYER_DATA:
@@ -974,12 +1115,14 @@ def get_game_status() -> str:
         total_summaries = sum(stats.get('summaries', 0) for stats in game_state["memory_stats"].values())
         memory_info = f"\n\n**Mémoire:**\n- 💬 Messages: {total_messages}\n- 📝 Résumés: {total_summaries}"
     
+    # 🆕 Ajout de l'alcool dans l'affichage des ressources
     status = f"""## 🎮 État du Jeu
     
 **Ressources:**
 - 💰 Or: {CURRENT_PLAYER_DATA['player_stats']['gold']}
 - 🍪 Cookies: {CURRENT_PLAYER_DATA['player_stats']['cookies']}
 - 🧶 Tissu: {CURRENT_PLAYER_DATA['player_stats']['fabric']}
+- 🍷 Alcool: {CURRENT_PLAYER_DATA['player_stats']['alcool']}
 
 **Montgolfière:** {repair_status}
 
@@ -1003,7 +1146,12 @@ def get_quests_info() -> str:
     quests_text += "**Quêtes principales:**\n"
     for quest_id, quest in CURRENT_PLAYER_DATA["quests"]["main_quests"].items():
         if quest.get("discovered", False):
-            status = "✅" if quest.get("completed", False) else "🔄" if quest.get("active", False) else "⏸️"
+            if quest.get("completed", False):
+                status = "🎉"  # Emoji spécial pour les quêtes principales complétées
+            elif quest.get("active", False):
+                status = "🔄"
+            else:
+                status = "⏸️"
             quests_text += f"{status} {quest.get('title', quest_id)}\n"
     
     # Sous-quêtes
@@ -1100,29 +1248,41 @@ def get_debug_info() -> str:
     for i, event in enumerate(recent_events, 1):
         timestamp = datetime.fromtimestamp(event["timestamp"]).strftime("%H:%M:%S")
         session_id = event.get("session_id", "N/A")
-        debug_text += f"**{i}. {timestamp}** - {event['character'].title()} (Session: {session_id})\n"
-        debug_text += f"   - Message: {event['user_message'][:50]}...\n"
-        debug_text += f"   - Complexité: {event['complexity']}\n"
-        debug_text += f"   - RAG: {'✅' if event['rag_used'] else '❌'}\n"
-        debug_text += f"   - Résumé mémoire: {'✅' if event.get('memory_summarized', False) else '❌'}\n"
+        event_type = event.get("type", "conversation")
+        character = event.get("character", "Unknown")
         
-        # Informations sur les modes de fallback
-        if event.get('fallback_mode', False):
-            debug_text += f"   - ⚠️ Mode fallback actif\n"
-        if event.get('emergency_fallback', False):
-            debug_text += f"   - 🚨 Mode urgence utilisé\n"
+        debug_text += f"**{i}. {timestamp}** - {character.title()} (Session: {session_id})\n"
         
-        # Affichage des triggers de sortie
-        output_triggers = event.get('output_triggers', {})
-        if output_triggers and isinstance(output_triggers, dict):
-            triggers_str = []
-            for k, v in output_triggers.items():
-                if isinstance(v, dict) and 'prob' in v:
-                    triggers_str.append(f'{k}({v["prob"]:.2f})')
-                else:
-                    triggers_str.append(f'{k}(?)')
-            if triggers_str:
-                debug_text += f"   - Triggers: {', '.join(triggers_str)}\n"
+        # Gestion différente selon le type d'événement
+        if event_type == "quest_discovery":
+            debug_text += f"   - Type: 🎯 Découverte de quête\n"
+            debug_text += f"   - Trigger: {event.get('quest_trigger', 'N/A')}\n"
+            debug_text += f"   - Probabilité: {event.get('probability', 0):.2f}\n"
+        else:
+            # Événement de conversation normale
+            user_msg = event.get('user_message', 'Message non disponible')
+            debug_text += f"   - Message: {user_msg[:50]}...\n"
+            debug_text += f"   - Complexité: {event.get('complexity', 'N/A')}\n"
+            debug_text += f"   - RAG: {'✅' if event.get('rag_used', False) else '❌'}\n"
+            debug_text += f"   - Résumé mémoire: {'✅' if event.get('memory_summarized', False) else '❌'}\n"
+        # Informations sur les modes de fallback (seulement pour les conversations)
+        if event_type != "quest_discovery":
+            if event.get('fallback_mode', False):
+                debug_text += f"   - ⚠️ Mode fallback actif\n"
+            if event.get('emergency_fallback', False):
+                debug_text += f"   - 🚨 Mode urgence utilisé\n"
+            
+            # Affichage des triggers de sortie
+            output_triggers = event.get('output_triggers', {})
+            if output_triggers and isinstance(output_triggers, dict):
+                triggers_str = []
+                for k, v in output_triggers.items():
+                    if isinstance(v, dict) and 'prob' in v:
+                        triggers_str.append(f'{k}({v["prob"]:.2f})')
+                    else:
+                        triggers_str.append(f'{k}(?)')
+                if triggers_str:
+                    debug_text += f"   - Triggers: {', '.join(triggers_str)}\n"
         debug_text += "\n"
     
     return debug_text
@@ -1226,6 +1386,7 @@ def create_interface():
     with gr.Blocks(theme=theme, title="🎈 EchoForge - Système de Quêtes avec Sessions") as demo:
         
         # Variables d'état pour l'interface
+        show_intro_screen = gr.State(True)
         chat_visible = gr.State(False)
         current_char = gr.State("")
         map_visible = gr.State(True)
@@ -1253,6 +1414,36 @@ def create_interface():
             <p><em>Sélectionnez une session existante ou créez-en une nouvelle pour commencer !</em></p>
         </div>
         """)
+
+        with gr.Column(visible=False) as intro_screen:
+            gr.Markdown("""
+            ## 🌪️ Tempête en vue...
+
+            Vous étiez seul dans une montgolfière, flottant au-dessus de l’océan.  
+            Soudain, une tempête violente vous a emporté vers une île mystérieuse...
+
+            Votre montgolfière est **endommagée** :
+            - La toile est **déchirée**
+            - Le moteur est **hors service**
+
+            Pour repartir, vous devrez explorer l’île, obtenir du tissu et trouver de l’aide pour réparer votre machine.
+
+            Bonne chance, aventurier.
+            """)
+
+            continue_button = gr.Button("🎮 Continuer l'aventure")
+
+        with gr.Column(visible=False) as victory_screen:
+            gr.Markdown("""
+            ## 🏆 Victoire !
+
+            Grâce à vos efforts, la montgolfière est enfin réparée.  
+            Le tissu recousu, le moteur rugit à nouveau.
+
+            Vous quittez l'île, emportant avec vous des souvenirs... et peut-être des secrets.
+
+            **Félicitations !**
+            """)
         
         # Interface de sélection de session (visible au démarrage)
         with gr.Column(visible=True) as session_selection_container:
@@ -1352,20 +1543,30 @@ def create_interface():
                             quests_info = gr.Markdown(get_quests_info())
                         
                         with gr.TabItem("👥 Personnages"):
+                            # 🆕 Mise à jour des infos personnages avec les nouveaux triggers
                             personality_info = f"""
 **👑 Martine** - Maire  
-*Donne de l'or, connaît les secrets*
+*Donne de l'or, connaît les secrets, évoque les quêtes*
+*Peut donner de l'alcool si vous gagnez sa confiance*
 
 **🔨 Claude** - Forgeron  
 *Répare la montgolfière contre des cookies*
+*Peut vous donner de l'alcool*
 
 **✂️ Azzedine** - Styliste  
 *Vend du tissu contre de l'or*
+*Évoque des quêtes d'amélioration*
 
 **👩‍🍳 Roberte** - Cuisinière  
 *Donne des cookies pendant ses pauses*
+*Évoque des quêtes culinaires*
 
 💡 **IA Avancée:** Les personnages gardent en mémoire vos interactions et détectent automatiquement vos intentions !
+
+🆕 **Nouveaux éléments:**
+- 🍷 **Alcool** : Nouvelle ressource obtenue auprès de Claude et Martine
+- 🎯 **Triggers de quêtes** : Les personnages évoquent naturellement les quêtes
+- 🔄 **Actions conditionnelles** : Certaines actions dépendent de vos relations
 
 🔗 **Sessions:** Vos conversations sont sauvegardées par session (fichier `player_session_XXX.json`)
 """
@@ -1446,6 +1647,12 @@ def create_interface():
                 return gr.update(visible=True)
             return gr.update(visible=False)
         
+        def check_victory_condition():
+            if CURRENT_PLAYER_DATA and CURRENT_PLAYER_DATA["quests"]["main_quests"]["repair_montgolfiere"]["completed"]:
+                return gr.update(visible=True), gr.update(visible=False), gr.update(visible=False)
+            return gr.update(visible=False), gr.update(visible=True), gr.update(visible=True)
+
+        
         def update_session_dropdown():
             """Met à jour la liste des sessions."""
             return gr.update(choices=get_session_list())
@@ -1483,6 +1690,15 @@ def create_interface():
             )
         
         # Connexions des événements - Gestion des sessions
+        continue_button.click(
+            lambda: (
+                gr.update(visible=False),  # intro_screen caché
+                gr.update(visible=True),   # game_interface_container visible
+                False                      # show_intro_screen à False
+            ),
+            outputs=[intro_screen, game_interface_container, show_intro_screen]
+        )
+        
         refresh_sessions_btn.click(
             update_session_dropdown,
             outputs=[session_dropdown]
@@ -1500,7 +1716,12 @@ def create_interface():
         create_session_btn.click(
             handle_new_session,
             inputs=[new_session_name],
-            outputs=[session_status_msg, session_selection_container, session_info_display, map_image, game_interface_container, game_status, memory_info]
+            outputs=[session_status_msg, session_selection_container, session_info_display, map_image, game_interface_container, game_status, memory_info, show_intro_screen]
+        ).then(
+            # Cette fonction utilise la valeur de show_intro_screen pour afficher l'intro
+            lambda show_intro: gr.update(visible=show_intro),
+            inputs=[show_intro_screen],
+            outputs=[intro_screen]
         ).then(
             refresh_all_stats,
             outputs=[game_status, memory_info, debug_info, quests_info]
@@ -1544,6 +1765,9 @@ def create_interface():
             check_conversation_end,
             outputs=[end_conversation_msg]
         ).then(
+            check_victory_condition,
+            outputs=[victory_screen, map_image, instruction_msg]
+        ).then(
             update_chat_visibility,
             inputs=[chat_visible, current_char, map_visible, chat_locked],
             outputs=[chat_container, character_title, instruction_msg, map_image, msg, send_btn]
@@ -1559,6 +1783,9 @@ def create_interface():
         ).then(
             check_conversation_end,
             outputs=[end_conversation_msg]
+        ).then(
+            check_victory_condition,
+            outputs=[victory_screen, map_image, instruction_msg]
         ).then(
             update_chat_visibility,
             inputs=[chat_visible, current_char, map_visible, chat_locked],
@@ -1619,7 +1846,7 @@ def create_interface():
                 outputs=[game_status, memory_info, debug_info]
             )
         
-        # Instructions
+        # Instructions mises à jour
         gr.HTML(f"""
         <div style="text-align: center; padding: 20px; margin-top: 20px; background-color: #f0f0f0; border-radius: 10px;">
             <h4>🎯 Comment jouer avec Sessions et IA avancée</h4>
@@ -1628,6 +1855,12 @@ def create_interface():
             <p><strong>🧠 Mémoire:</strong> L'IA se souvient de toutes vos interactions précédentes dans la session</p>
             <p><strong>🎈 Objectif:</strong> Réparez votre montgolfière en parlant aux habitants de l'île</p>
             <p><strong>🎮 Navigation:</strong> Cliquez sur les personnages, suivez les quêtes, explorez !</p>
+            <hr>
+            <p>🆕 <strong>Nouveautés:</strong></p>
+            <p>🍷 <strong>Alcool:</strong> Nouvelle ressource obtenue auprès de Claude et Martine</p>
+            <p>🎯 <strong>Triggers avancés:</strong> Les personnages évoquent naturellement les quêtes et proposent de l'aide</p>
+            <p>🔄 <strong>Actions conditionnelles:</strong> Certaines actions dépendent de vos relations et possessions</p>
+            <p>💡 <strong>Astuce:</strong> Explorez toutes les possibilités de conversation pour découvrir de nouveaux triggers !</p>
             <hr>
             <p>💡 <strong>Astuce:</strong> Utilisez différentes sessions pour explorer différentes stratégies de jeu</p>
             <p>🤖 <strong>IA Avancée:</strong> Les personnages comprennent le contexte et réagissent de façon cohérente</p>
@@ -1666,6 +1899,10 @@ def main():
     print(f"💾 Template joueur: {PLAYER_TEMPLATE['player_stats']}")
     print(f"📁 Dossier sessions: {SESSIONS_DIR}")
     print("🔗 Sessions disponibles:", len(SessionManager.get_available_sessions()))
+    print("🆕 Nouvelles fonctionnalités:")
+    print("  - 🍷 Ressource alcool ajoutée")
+    print("  - 🎯 Nouveaux triggers de quêtes")
+    print("  - 🔄 Actions conditionnelles avancées")
     print("🎮 Lancement de l'interface avec gestion des sessions...")
     
     # Création et lancement de l'interface

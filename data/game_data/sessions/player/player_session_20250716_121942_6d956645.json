@@ -1,8 +1,9 @@
 {
   "player_stats": {
-    "gold": 0,
-    "cookies": 0,
-    "fabric": 0
+    "gold": 10,
+    "cookies": 3,
+    "fabric": 0,
+    "alcool": 1
   },
   "montgolfiere_status": {
     "motor_repaired": false,
@@ -25,7 +26,7 @@
         "title": "Réparer la montgolfière",
         "description": "Votre montgolfière est endommagée ! Vous devez réparer le moteur et recoudre la toile pour pouvoir quitter l'île.",
         "discovered": true,
-        "completed": false,
+        "completed": true,
         "active": true,
         "priority": "high",
         "progress": 0,
@@ -50,7 +51,7 @@
         "title": "Trouver des cookies pour Claude",
         "description": "Claude a faim et refuse de réparer le moteur sans cookies. Trouvez 5 cookies pour le convaincre.",
         "parent_quest": "repair_montgolfiere",
-        "discovered": false,
+        "discovered": true,
         "completed": false,
         "active": false,
         "priority": "medium",
@@ -74,9 +75,9 @@
         "title": "Trouver de l'or pour Azzedine",
         "description": "Azzedine demande 15 pièces d'or pour acheter le tissu nécessaire à la réparation.",
         "parent_quest": "repair_montgolfiere",
-        "discovered": false,
-        "completed": false,
-        "active": false,
+        "discovered": true,
+        "completed": true,
+        "active": true,
         "priority": "medium",
         "progress": 0,
         "max_progress": 15,
@@ -99,9 +100,9 @@
         "id": "side_001",
         "title": "Découvrir le trésor de l'île",
         "description": "Une légende parle d'un trésor ancestral caché sur l'île. Martine semble en savoir plus...",
-        "discovered": false,
+        "discovered": true,
         "completed": false,
-        "active": false,
+        "active": true,
         "priority": "low",
         "progress": 0,
         "max_progress": 1,
@@ -117,31 +118,6 @@
           "Martine garde les secrets de l'île",
           "Gagnez sa confiance pour en apprendre plus",
           "Le trésor pourrait résoudre vos problèmes d'argent"
-        ]
-      },
-      "befriend_all_islanders": {
-        "id": "side_002",
-        "title": "Se lier d'amitié avec tous les habitants",
-        "description": "Apprenez à connaître chaque habitant de l'île et gagnez leur confiance.",
-        "discovered": false,
-        "completed": false,
-        "active": false,
-        "priority": "low",
-        "progress": 0,
-        "max_progress": 4,
-        "rewards": {
-          "special": "Débloquer des histoires secrètes"
-        },
-        "completion_conditions": {
-          "martine_friendship": false,
-          "claude_friendship": false,
-          "azzedine_friendship": false,
-          "roberte_friendship": false
-        },
-        "hints": [
-          "Chaque habitant a sa personnalité unique",
-          "Écoutez leurs histoires et préoccupations",
-          "Aidez-les dans leurs besoins quotidiens"
         ]
       }
     }
@@ -206,9 +182,10 @@
   },
   "meta": {
     "version": "1.0.0",
-    "last_updated": "2025-07-15T12:48:45.971684+00:00",
-    "created": "2025-07-15T12:48:45.971634+00:00",
+    "last_updated": "2025-07-16T10:30:41.948648+00:00",
+    "created": "2025-07-16T10:19:42.078245+00:00",
     "total_playtime": 0,
-    "save_count": 1
+    "save_count": 6,
+    "session_id": "session_20250716_121942_6d956645"
   }
 }

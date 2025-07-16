@@ -2,7 +2,8 @@
   "player_stats": {
     "gold": 0,
     "cookies": 0,
-    "fabric": 0
+    "fabric": 0,
+    "alcool": 0
   },
   "montgolfiere_status": {
     "motor_repaired": false,
@@ -118,31 +119,6 @@
           "Gagnez sa confiance pour en apprendre plus",
           "Le trésor pourrait résoudre vos problèmes d'argent"
         ]
-      },
-      "befriend_all_islanders": {
-        "id": "side_002",
-        "title": "Se lier d'amitié avec tous les habitants",
-        "description": "Apprenez à connaître chaque habitant de l'île et gagnez leur confiance.",
-        "discovered": false,
-        "completed": false,
-        "active": false,
-        "priority": "low",
-        "progress": 0,
-        "max_progress": 4,
-        "rewards": {
-          "special": "Débloquer des histoires secrètes"
-        },
-        "completion_conditions": {
-          "martine_friendship": false,
-          "claude_friendship": false,
-          "azzedine_friendship": false,
-          "roberte_friendship": false
-        },
-        "hints": [
-          "Chaque habitant a sa personnalité unique",
-          "Écoutez leurs histoires et préoccupations",
-          "Aidez-les dans leurs besoins quotidiens"
-        ]
       }
     }
   },
@@ -206,9 +182,10 @@
   },
   "meta": {
     "version": "1.0.0",
-    "last_updated": "2025-07-15T12:39:43.166983+00:00",
-    "created": "2025-07-15T12:39:43.166921+00:00",
+    "last_updated": "2025-07-16T12:08:38.142809+00:00",
+    "created": "2025-07-16T12:07:15.869962+00:00",
     "total_playtime": 0,
-    "save_count": 1
+    "save_count": 2,
+    "session_id": "session_20250716_140715_878118c9"
   }
 }

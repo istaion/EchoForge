@@ -1,8 +1,9 @@
 {
   "player_stats": {
-    "gold": 5,
+    "gold": 0,
     "cookies": 0,
-    "fabric": 0
+    "fabric": 0,
+    "alcool": 0
   },
   "montgolfiere_status": {
     "motor_repaired": false,
@@ -74,7 +75,7 @@
         "title": "Trouver de l'or pour Azzedine",
         "description": "Azzedine demande 15 pièces d'or pour acheter le tissu nécessaire à la réparation.",
         "parent_quest": "repair_montgolfiere",
-        "discovered": true,
+        "discovered": false,
         "completed": false,
         "active": false,
         "priority": "medium",
@@ -117,31 +118,6 @@
           "Martine garde les secrets de l'île",
           "Gagnez sa confiance pour en apprendre plus",
           "Le trésor pourrait résoudre vos problèmes d'argent"
-        ]
-      },
-      "befriend_all_islanders": {
-        "id": "side_002",
-        "title": "Se lier d'amitié avec tous les habitants",
-        "description": "Apprenez à connaître chaque habitant de l'île et gagnez leur confiance.",
-        "discovered": false,
-        "completed": false,
-        "active": false,
-        "priority": "low",
-        "progress": 0,
-        "max_progress": 4,
-        "rewards": {
-          "special": "Débloquer des histoires secrètes"
-        },
-        "completion_conditions": {
-          "martine_friendship": false,
-          "claude_friendship": false,
-          "azzedine_friendship": false,
-          "roberte_friendship": false
-        },
-        "hints": [
-          "Chaque habitant a sa personnalité unique",
-          "Écoutez leurs histoires et préoccupations",
-          "Aidez-les dans leurs besoins quotidiens"
         ]
       }
     }
@@ -206,9 +182,10 @@
   },
   "meta": {
     "version": "1.0.0",
-    "last_updated": "2025-07-15T13:37:51.505062+00:00",
-    "created": "2025-07-15T13:26:49.640202+00:00",
+    "last_updated": "2025-07-16T11:47:58.640273+00:00",
+    "created": "2025-07-16T11:47:58.639808+00:00",
     "total_playtime": 0,
-    "save_count": 3
+    "save_count": 1,
+    "session_id": "session_20250716_134758_eaf3ecfa"
   }
 }

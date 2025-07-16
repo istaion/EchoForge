@@ -182,9 +182,10 @@
   },
   "meta": {
     "version": "1.0.0",
-    "last_updated": "2025-07-15T09:44:43.855553",
-    "created": "2025-01-15T10:00:00Z",
+    "last_updated": "2025-07-16T11:42:08.383547+00:00",
+    "created": "2025-07-16T11:42:08.382989+00:00",
     "total_playtime": 0,
-    "save_count": 0
+    "save_count": 1,
+    "session_id": "session_20250716_134208_97e8fee2"
   }
 }

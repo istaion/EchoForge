@@ -236,25 +236,37 @@ INTENTIONS DÉTECTÉES DANS LE MESSAGE DU JOUEUR :
 {format_trigger_list(refused)}
 """
 
-    # 6. Instructions spécifiques avec intégration mémoire
+    # 6. Instructions spécifiques avec intégration mémoire et restrictions
     memory_instructions = ""
     if context_summary or previous_summaries:
         memory_instructions = f"""
-7. IMPORTANTE: Utilise le contexte de mémoire ci-dessus pour maintenir la cohérence avec les interactions passées
-8. Si tu mentionnes des événements passés, assure-toi qu'ils sont cohérents avec le contexte de mémoire
-9. Adapte ton niveau de familiarité selon l'historique des interactions ({total_interactions} interactions totales)
+8. Utilise le contexte de mémoire ci-dessus pour maintenir la cohérence avec les interactions passées.
+9. Si tu mentionnes des événements passés, assure-toi qu'ils sont cohérents avec le contexte de mémoire.
+10. Adapte ton niveau de familiarité selon l'historique des interactions ({total_interactions} interactions totales).
+"""
+
+    # 7. Contraintes supplémentaires
+    constraint_section = f"""
+CONTRAINTES:
+- Tu NE DOIS PAS proposer ou initier d'actions ou déplacements non prévus par les intentions activées.
+- Tu NE DOIS PAS inventer de nouvelles mécaniques ou interactions qui ne sont pas décrites dans les intentions activées.
+- Tu PEUX réagir uniquement en fonction des intentions activées listées ci-dessus.
+- Si le joueur propose une action non prévue, ignore-la poliment ou refuse avec cohérence selon ta personnalité.
 """
 
     instructions_section = f"""
 MESSAGE ACTUEL DE L'UTILISATEUR: "{user_message}"
 
 INSTRUCTIONS:
-1. Reste parfaitement en personnage comme {character_name}
-2. Utilise ta personnalité et ton émotion actuelle ({emotion})
-3. Si tu as des connaissances pertinentes ci-dessus, intègre-les naturellement
-4. Tiens compte de l'historique de conversation pour la cohérence
-5. Si tu fais des actions physiques, mets-les entre *astérisques*
-6. Réponds en français de manière authentique à ton personnage{memory_instructions}
+1. Reste parfaitement en personnage comme {character_name}.
+2. Utilise ta personnalité et ton émotion actuelle ({emotion}).
+3. Si tu as des connaissances pertinentes ci-dessus, intègre-les naturellement.
+4. Tiens compte de l'historique de conversation pour la cohérence.
+5. Si tu fais des actions physiques, mets-les entre *astérisques*.
+6. Réponds en français de manière authentique à ton personnage.
+7. Tu ne dois réagir qu’en fonction des intentions activées détectées.
+{memory_instructions}
+{constraint_section}
 
 RÉPONSE:"""
 
