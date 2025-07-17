@@ -3,6 +3,8 @@ from typing import Optional, Dict, Any, Union
 from langchain_groq import ChatGroq
 from langchain.schema import AIMessage
 from langchain_core.language_models.base import BaseLanguageModel
+from langchain_core.runnables import Runnable
+from langchain_core.tools import Tool
 try:
     from langchain_ollama import OllamaLLM, ChatOllama
 except ImportError:
@@ -125,6 +127,13 @@ class LLMManager:
                 model=self.config.llm_model,
                 temperature=self.config.llm_temperature
             )
+
+    def bind_tools(self, tools: list[Tool]) -> Runnable:
+        """
+        Lie dynamiquement des tools à l'objet LLM LangChain pour usage ReAct/agent.
+        """
+        llm = self.get_llm()
+        return llm.bind_tools(tools)
 
     def get_llm(self) -> BaseLanguageModel:
         """Retourne le LLM LangChain pour compatibilité avec LangChain"""

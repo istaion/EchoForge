@@ -205,6 +205,7 @@ class CharacterGraphManager:
         self, 
         user_message: str, 
         character_data: dict,
+        player_data: dict,
         thread_id: str = "default",
         session_id: Optional[str] = None
     ) -> dict:
@@ -230,6 +231,7 @@ class CharacterGraphManager:
         initial_state = self._build_initial_state(
             user_message, 
             character_data, 
+            player_data,
             thread_id, 
             session_id
         )
@@ -344,6 +346,7 @@ class CharacterGraphManager:
         self, 
         user_message: str, 
         character_data: dict, 
+        player_data: dict,
         thread_id: str,
         session_id: Optional[str]
     ) -> CharacterState:
@@ -361,6 +364,9 @@ class CharacterGraphManager:
             parsed_message=None,
             message_intent=None,
             
+            # Player
+            character_data=player_data
+
             # Personnage
             character_name=character_data.get("name", "unknown"),
             character_data=character_data,

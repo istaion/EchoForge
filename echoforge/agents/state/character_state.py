@@ -17,6 +17,9 @@ class CharacterState(TypedDict):
     parsed_message: Optional[str]
     message_intent: Optional[str]
     
+    # === CONTEXTE JEUX ===
+    player_data: Dict[str, Any]
+
     # === CONTEXTE PERSONNAGE ===
     character_name: str
     character_data: Dict[str, Any]

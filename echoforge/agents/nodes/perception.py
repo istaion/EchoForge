@@ -2,10 +2,75 @@ import time
 import re
 from typing import Dict, Any
 from ..state.character_state import CharacterState
+from langchain.tools import tool
 from langsmith import traceable
 from echoforge.utils.config import get_config
 from echoforge.core.llm_providers import LLMManager
 import json
+
+@tool
+def get_character_state(state: CharacterState) -> dict:
+    """Retourne les données du personnage ia."""
+    return {
+            k: v for k, v in state["character_data"].items() if k != "triggers"
+        }
+
+@tool
+def get_player_state(state: CharacterState) -> dict:
+    """Retourne les données du personnage oueur  et du jeu : inventaire, relation, etc."""
+    return state["player_data"]
+
+def interpret_triggers_node(llm_manager: LLMManager):
+    def fn(state: CharacterState) -> CharacterState:
+        # Préparer le prompt
+        triggers = state["character_data"]["triggers"]["input"]
+        player_msg = state["user_message"]
+
+        tool_bound_llm = llm_manager.bind_tools([get_player_state, get_character_state])
+
+        system_prompt = "Tu es un détecteur d’intentions. Tu scores les triggers, puis vérifies les conditions si nécessaires."
+        user_prompt = f"""
+Message du joueur : "{player_msg}"
+
+Voici les triggers disponibles :
+{json.dumps(triggers, indent=2)}
+
+Rappelle-toi : certains triggers ont des conditions que tu peux vérifier via les tools.
+Rends un JSON au format :
+{{
+  "input_trigger_probs": {{...}},
+  "activated_input_triggers": [...],
+  "refused_input_triggers": [
+    {{"trigger": "...", "reason_refused": "..."}}
+  ]
+}}
+"""
+
+        # LLM avec tools (ReAct-style)
+        result = tool_bound_llm.invoke([
+            ("system", system_prompt),
+            ("user", user_prompt)
+        ])
+
+        try:
+            final_json = extract_json_block(result)
+            parsed = json.loads(final_json)
+        except Exception as e:
+            parsed = {
+                "input_trigger_probs": {},
+                "activated_input_triggers": [],
+                "refused_input_triggers": [{"trigger": "ALL", "reason_refused": f"Erreur LLM: {e}"}]
+            }
+
+        # Injection dans le state
+        state["input_trigger_probs"] = parsed.get("input_trigger_probs", {})
+        state["activated_input_triggers"] = parsed.get("activated_input_triggers", [])
+        state["refused_input_triggers"] = parsed.get("refused_input_triggers", [])
+        state["processing_steps"].append("interpret_triggers")
+
+        return state
+
+    return fn
 
 config = get_config()
 def interpret_player_input_node(llm_manager: LLMManager):

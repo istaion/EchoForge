@@ -498,6 +498,7 @@ class EchoForgeAgentWrapper:
         try:
             # 🆕 Utilise les données du personnage depuis le state de session
             character_data = CHARACTERS[character_key].copy()
+            player_data = CURRENT_PLAYER_DATA.copy()
             
             # Utilisation du session_id actuel
             session_id = game_state.get("current_session_id")
@@ -507,6 +508,7 @@ class EchoForgeAgentWrapper:
             result = await self.graph_manager.process_message(
                 user_message=user_message,
                 character_data=character_data,
+                player_data=player_data,
                 thread_id=thread_id,
                 session_id=session_id
             )
