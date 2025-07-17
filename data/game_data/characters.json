@@ -1,6 +1,6 @@
 {
     "martine": {
-        "name": "Martine",
+        "character_name": "Martine",
         "role": "Maire de l'île",
         "personality": {
             "traits": {
@@ -96,7 +96,7 @@
         }
     }},
     "claude": {
-        "name": "Claude",
+        "character_name": "Claude",
         "role": "Forgeron de l'île",
         "personality": {
             "traits": {
@@ -186,7 +186,7 @@
     }
     },
     "azzedine": {
-        "name": "Azzedine",
+        "character_name": "Azzedine",
         "role": "Styliste de l'île",
         "personality": {
             "traits": {
@@ -261,7 +261,7 @@
             }
 }},
     "roberte": {
-        "name": "Roberte",
+        "character_name": "Roberte",
         "role": "Cuisinière de l'île",
         "personality": {
             "traits": {

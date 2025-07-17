@@ -1,6 +1,6 @@
 {
   "martine": {
-    "name": "Martine",
+    "character_name": "Martine",
     "role": "Maire de l'île",
     "personality": {
       "traits": {
@@ -11,6 +11,7 @@
         "generosity": 0.6
       },
       "speech_style": "Formel mais chaleureux",
+      "current_alcohol_level": "sober",
       "description": "Diplomatique, curieuse et protectrice de sa communauté"
     },
     "backstory": "Maire élue depuis 10 ans, garde les secrets de l'île et possède un trésor ancestral",
@@ -29,12 +30,22 @@
     },
     "conversation_history": [],
     "relation": 0,
+    "relation_triggers": {
+      "love": [
+        "alcool",
+        "politesse"
+      ],
+      "hate": [
+        "vulgarité",
+        "qu'on s'intéresse de trop près au trésor de l'île"
+      ]
+    },
     "triggers": {
       "input": {
         "bye": {
           "trigger": "Le joueur dit au revoir",
           "effect": "Martine dit au revoir. Fin de la conversation.",
-          "threshold": 0.8,
+          "threshold": 0.7,
           "consequence_type": "dialogue_only",
           "output": "bye_trigger_probs=..."
         },
@@ -48,7 +59,7 @@
         },
         "give_alcool": {
           "trigger": "Le joueur donne ou propose à martine de boire",
-          "threshold": 0.6,
+          "threshold": 0.7,
           "consequence_type": "action",
           "conditions": "alcool in possesion",
           "effect": "Martine boit et devient soul",
@@ -98,12 +109,12 @@
       }
     },
     "meta": {
-      "last_updated": "2025-07-16T11:42:08.385319+00:00",
-      "session_id": "session_20250716_134208_97e8fee2"
+      "last_updated": "2025-07-17T14:33:32.945917+00:00",
+      "session_id": "session_20250717_163332_3581a958"
     }
   },
   "claude": {
-    "name": "Claude",
+    "character_name": "Claude",
     "role": "Forgeron de l'île",
     "personality": {
       "traits": {
@@ -113,7 +124,7 @@
         "negotiation": 0.7,
         "reliability": 0.8
       },
-      "speech_style": "Franc, utilise du vocabulaire technique, parle de métal et d'outils",
+      "speech_style": "Franc, utilise du vocabulaire technique, laconique, se contente de répondre sans relance sauf si on parle de métal et d'outils",
       "description": "Pragmatique, direct, passionné par son métier"
     },
     "backstory": "Forgeron depuis 20 ans, peut réparer n'importe quoi mais aime négocier",
@@ -133,6 +144,16 @@
     },
     "conversation_history": [],
     "relation": 6,
+    "relation_triggers": {
+      "love": [
+        "cookies",
+        "discussion sur les outils et la forge"
+      ],
+      "hate": [
+        "demandes insistantes",
+        "bavardages inutiles"
+      ]
+    },
     "triggers": {
       "input": {
         "bye": {
@@ -168,7 +189,7 @@
       "output": {
         "bye": {
           "trigger": "Le personnage dit au revoir ou met fin à la conversation.",
-          "threshold": 0.8,
+          "threshold": 0.7,
           "output": "bye_trigger_probs=..."
         },
         "quest_side_001": {
@@ -195,12 +216,12 @@
       }
     },
     "meta": {
-      "last_updated": "2025-07-16T11:42:08.385331+00:00",
-      "session_id": "session_20250716_134208_97e8fee2"
+      "last_updated": "2025-07-17T14:33:32.945926+00:00",
+      "session_id": "session_20250717_163332_3581a958"
     }
   },
   "azzedine": {
-    "name": "Azzedine",
+    "character_name": "Azzedine",
     "role": "Styliste de l'île",
     "personality": {
       "traits": {
@@ -210,7 +231,7 @@
         "moodiness": 0.6,
         "pride": 0.7
       },
-      "speech_style": "Artistique, utilise des métaphores, parle de beauté et d'esthétique",
+      "speech_style": "Artistique, utilise des métaphores, parle de beauté et d'esthétique. Conclu ses au revoir par un petit poème",
       "description": "Créatif, perfectionniste, parfois capricieux"
     },
     "backstory": "Styliste talentueux, vend des tissus rares mais exigeant sur la qualité",
@@ -229,6 +250,18 @@
     },
     "conversation_history": [],
     "relation": 0,
+    "relation_triggers": {
+      "love": [
+        "beauté",
+        "tissus rares",
+        "compliments sur son style"
+      ],
+      "hate": [
+        "mauvais goût",
+        "critiques sur son travail",
+        "tissu bon marché"
+      ]
+    },
     "triggers": {
       "input": {
         "bye": {
@@ -257,7 +290,7 @@
       "output": {
         "bye": {
           "trigger": "Le personnage dit au revoir ou met fin à la conversation.",
-          "threshold": 0.8,
+          "threshold": 0.7,
           "output": "bye_trigger_probs=..."
         },
         "quest_side_001": {
@@ -278,12 +311,12 @@
       }
     },
     "meta": {
-      "last_updated": "2025-07-16T11:42:08.385335+00:00",
-      "session_id": "session_20250716_134208_97e8fee2"
+      "last_updated": "2025-07-17T14:33:32.945931+00:00",
+      "session_id": "session_20250717_163332_3581a958"
     }
   },
   "roberte": {
-    "name": "Roberte",
+    "character_name": "Roberte",
     "role": "Cuisinière de l'île",
     "personality": {
       "traits": {
@@ -293,8 +326,9 @@
         "warmth": 0.8,
         "scheduling": 0.9
       },
-      "speech_style": "Maternel, parle de recettes et d'ingrédients, utilise des expressions culinaires",
-      "description": "Généreuse mais territoriale, perfectionniste en cuisine"
+      "speech_style": "Maternel, parle de recettes et d'ingrédients, utilise des expressions culinaires. Si elle est en cuisine elle devient sèche et n'écoute même pas la personne qui lui parle. Elle lui demande directement de partir",
+      "description": "Généreuse mais territoriale, perfectionniste en cuisine",
+      "in_kitchen": false
     },
     "backstory": "Cuisinière réputée, déteste être dérangée pendant son travail mais offre volontiers des cookies en pause",
     "current_emotion": "neutral",
@@ -313,6 +347,18 @@
     },
     "conversation_history": [],
     "relation": 0,
+    "relation_triggers": {
+      "love": [
+        "ingrédients frais",
+        "compliments sur sa cuisine",
+        "respect des horaires"
+      ],
+      "hate": [
+        "être interrompue en cuisine",
+        "critiques culinaires",
+        "désordre dans sa cuisine"
+      ]
+    },
     "triggers": {
       "input": {
         "bye": {
@@ -333,7 +379,7 @@
       "output": {
         "bye": {
           "trigger": "Le personnage dit au revoir ou met fin à la conversation.",
-          "threshold": 0.8,
+          "threshold": 0.7,
           "output": "bye_trigger_probs=..."
         },
         "quest_side_001": {
@@ -355,8 +401,8 @@
       }
     },
     "meta": {
-      "last_updated": "2025-07-16T11:42:08.385338+00:00",
-      "session_id": "session_20250716_134208_97e8fee2"
+      "last_updated": "2025-07-17T14:33:32.945934+00:00",
+      "session_id": "session_20250717_163332_3581a958"
     }
   }
 }

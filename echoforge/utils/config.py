@@ -21,8 +21,11 @@ class EchoForgeConfig(BaseSettings):
         default="paraphrase-multilingual:278m-mpnet-base-v2-fp16",
         description="Modèle d'embeddings"
     )
-    llm_model: str = Field(default="llama-3.1-8b-instant", description="Modèle LLM")
-    llm_provider: str = Field(default="groq", description="Provider LLM (ollama, groq)")
+    ollama_model: str = Field(default="llama3.1:8b", description="Modèle Ollama")
+    groq_model: str = Field(default="llama-3.1-8b-instant", description="Modèle Groq")
+    openai_model: str = Field(default="gpt-3.5-turbo", description="Modèle OpenAI")
+    llm_model: str = Field(default="llama-3.1-8b-instant", description="Modèle par défaut")
+    llm_provider: str = Field(default="groq", description="Provider LLM (ollama, groq, openai)")
     llm_temperature: float = Field(default=0.7, description="Température du LLM")
     
     # Configuration RAG
@@ -134,6 +137,12 @@ class EchoForgeConfig(BaseSettings):
         self._setup_langsmith()
         # 🆕 Validation des paramètres mémoire
         self._validate_memory_config()
+        if self.llm_provider == "groq":
+            self.llm_model = self.groq_model
+        elif self.llm_provider == "openai":
+            self.llm_model = self.openai_model
+        else:
+            self.llm_model = self.ollama_model
     
     def _validate_memory_config(self):
         """Valide la cohérence des paramètres de mémoire."""
@@ -215,7 +224,7 @@ class EchoForgeConfig(BaseSettings):
         return f"""
 🔧 Configuration EchoForge:
   - LLM Provider: {self.llm_provider}
-  - LLM Model: {self.llm_model}
+  - LLM Model: {self.groq_model}
   - Temperature: {self.llm_temperature}
   - Groq API Key: {'✅ Configurée' if self.groq_api_key else '❌ Manquante'}
   - LangSmith: {'✅ Activé' if self.langsmith_tracing and self.langsmith_api_key else '❌ Désactivé'}

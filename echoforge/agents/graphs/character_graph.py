@@ -1,9 +1,10 @@
 from langgraph.graph import StateGraph, END
 from echoforge.agents.state.character_state import CharacterState
-from echoforge.agents.nodes.perception import perceive_input, interpret_player_input_node, decide_intent_node, interpret_character_output
+from echoforge.agents.nodes.perception import perceive_input, interpret_player_input_node, decide_intent_node, interpret_character_output, interpret_triggers_input_node
 from echoforge.agents.nodes.rag_assessment import assess_rag_need, validate_rag_results
 from echoforge.agents.nodes.rag_search import perform_rag_search
 from echoforge.agents.nodes.response_generation import generate_simple_response, generate_response
+from echoforge.agents.nodes.triggers import create_trigger_analysis_node
 from echoforge.agents.nodes.memory_update import update_character_memory, finalize_interaction, load_memory_context, check_memory_integration
 from echoforge.agents.checkpointers.postgres_checkpointer import create_safe_checkpointer, NoOpCheckpointSaver
 from langsmith import traceable
@@ -48,9 +49,10 @@ def create_character_graph_with_memory(character_name: str, enable_checkpointer:
     # Nœud de perception et analyse du message
     graph.add_node("perceive", perceive_input)
     
-    # Analyse des triggers
-    graph.add_node("interpret_input", interpret_player_input_node(llm_manager=LLMManager()))
-    graph.add_node("decide_intent", decide_intent_node())
+    # Analyse des triggers d'input
+    graph.add_node("interpret_input", create_trigger_analysis_node(llm_manager=LLMManager()))
+    # graph.add_node("interpret_input", interpret_player_input_node(llm_manager=LLMManager()))
+    # graph.add_node("decide_intent", decide_intent_node())
     
     # Nœud de vérification de l'intégration mémoire
     graph.add_node("check_memory_integration", check_memory_integration)
@@ -74,8 +76,8 @@ def create_character_graph_with_memory(character_name: str, enable_checkpointer:
     
     # Flux avec chargement de mémoire
     graph.add_edge("load_memory", "interpret_input")
-    graph.add_edge("interpret_input", "decide_intent")
-    graph.add_edge("decide_intent", "perceive")
+    # graph.add_edge("interpret_input", "decide_intent")
+    graph.add_edge("interpret_input", "perceive")
     graph.add_edge("perceive", "check_memory_integration")
     
     # Depuis la vérification mémoire, routage selon la complexité
@@ -365,7 +367,7 @@ class CharacterGraphManager:
             message_intent=None,
             
             # Player
-            character_data=player_data
+            player_data=player_data,
 
             # Personnage
             character_name=character_data.get("name", "unknown"),

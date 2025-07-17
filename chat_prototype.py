@@ -580,7 +580,7 @@ class EchoForgeAgentWrapper:
         except Exception as e:
             print(f"❌ Erreur dans l'agent pour {character_key}: {str(e)}")
             # Fallback d'urgence local
-            character_name = CHARACTERS[character_key].get('name', character_key)
+            character_name = CHARACTERS[character_key].get('character_name', character_key)
             return f"*{character_name} semble troublé*\n\nExcusez-moi, je rencontre des difficultés techniques. Pouvez-vous reformuler votre message ?\n\n🔧 Erreur: {str(e)}"
     
     # 🆕 Fonction mise à jour pour gérer tous les nouveaux triggers
@@ -1029,7 +1029,7 @@ def handle_map_click(evt: gr.SelectData) -> Tuple[str, bool, str, Image.Image, b
         game_state["last_bye_score"] = 0.0
         
         char_data = CHARACTERS[clicked_character]
-        welcome_message = f"Vous approchez de {char_data['emoji']} {char_data['name']} ({char_data['role']})"
+        welcome_message = f"Vous approchez de {char_data['emoji']} {char_data['character_name']} ({char_data['role']})"
         
         # Générer la carte avec le personnage actif mis en évidence
         updated_map = generate_interactive_map(clicked_character)
@@ -1186,7 +1186,7 @@ def get_memory_debug_info() -> str:
     debug_text = "## 🧠 État de la Mémoire\n\n"
     
     for char_id, stats in game_state["memory_stats"].items():
-        char_name = CHARACTERS[char_id]['name']
+        char_name = CHARACTERS[char_id]['character_name']
         debug_text += f"**{char_name}:**\n"
         debug_text += f"- Messages: {stats.get('total_messages', 0)}\n"
         debug_text += f"- Résumés: {stats.get('summaries', 0)}\n"
@@ -1600,7 +1600,7 @@ def create_interface():
             if visible and char_id:
                 char_data = CHARACTERS[char_id]
                 system_type = "🤖 Agent + Mémoire" if AGENTS_AVAILABLE else "📚 RAG"
-                title = f"## 💬 {system_type} - {char_data['emoji']} {char_data['name']}"
+                title = f"## 💬 {system_type} - {char_data['emoji']} {char_data['character_name']}"
                 
                 # Contrôle de l'interactivité selon le verrouillage
                 msg_interactive = not locked

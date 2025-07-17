@@ -1,76 +1,179 @@
 import time
 import re
 from typing import Dict, Any
+from functools import partial
 from ..state.character_state import CharacterState
 from langchain.tools import tool
+from langchain_core.tools import Tool
 from langsmith import traceable
 from echoforge.utils.config import get_config
 from echoforge.core.llm_providers import LLMManager
+from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 import json
 
-@tool
-def get_character_state(state: CharacterState) -> dict:
-    """Retourne les données du personnage ia."""
-    return {
-            k: v for k, v in state["character_data"].items() if k != "triggers"
-        }
+def make_get_player_state_tool(player_data: dict):
+    return Tool(
+        name="get_player_state_flat",
+        description="Retourne les données du joueur. IMPORTANT: Cette fonction ne prend AUCUN argument. Appelle-la sans paramètres.",
+        func=lambda: player_data,
+    )
 
-@tool
-def get_player_state(state: CharacterState) -> dict:
-    """Retourne les données du personnage oueur  et du jeu : inventaire, relation, etc."""
-    return state["player_data"]
+def make_get_character_state_tool(character_data: dict):
+    return Tool(
+        name="get_character_state",
+        description="Retourne les données du personnage. IMPORTANT: Cette fonction ne prend AUCUN argument. Appelle-la sans paramètres.",
+        func=lambda: character_data,
+    )
 
-def interpret_triggers_node(llm_manager: LLMManager):
+@traceable
+def interpret_triggers_input_node(llm_manager: LLMManager):
     def fn(state: CharacterState) -> CharacterState:
-        # Préparer le prompt
         triggers = state["character_data"]["triggers"]["input"]
         player_msg = state["user_message"]
+        player_data = state["player_data"]
+        character_data = {k: v for k, v in state["character_data"].items() if k != "triggers"}
 
-        tool_bound_llm = llm_manager.bind_tools([get_player_state, get_character_state])
+        # Crée les tools
+        tools = [
+            make_get_player_state_tool(player_data),
+            make_get_character_state_tool(character_data),
+        ]
+        
+        tool_bound_llm = llm_manager.bind_tools(tools)
 
-        system_prompt = "Tu es un détecteur d’intentions. Tu scores les triggers, puis vérifies les conditions si nécessaires."
-        user_prompt = f"""
-Message du joueur : "{player_msg}"
+        system_prompt = """Tu es un détecteur d'intentions. Tu scores les triggers, puis vérifies les conditions si nécessaires.
 
-Voici les triggers disponibles :
-{json.dumps(triggers, indent=2)}
+PROCESSUS:
+1. Analyse d'abord le message du joueur
+2. SI tu as besoin de données spécifiques pour vérifier les conditions, utilise les tools
+3. Évalue ensuite chaque trigger avec probabilité (0.0 à 1.0)
+4. Vérifie les conditions pour déterminer les triggers activés/refusés
+5. Retourne TOUJOURS le JSON final avec les résultats
 
-Rappelle-toi : certains triggers ont des conditions que tu peux vérifier via les tools.
-Rends un JSON au format :
+TOOLS DISPONIBLES:
+- get_player_state_flat(): données du joueur (or, cookies, alcool, etc.)
+- get_character_state(): données du personnage (relation, état, etc.)
+
+IMPORTANT: Les tools ne prennent AUCUN argument. Appelle-les sans paramètres."""
+
+        user_prompt = f"""Message du joueur : "{player_msg}"
+
+Triggers disponibles :
+{json.dumps(triggers, indent=2, ensure_ascii=False)}
+
+INSTRUCTIONS:
+1. Analyse le message pour détecter les intentions
+2. Si nécessaire pour vérifier les conditions, utilise get_player_state_flat() et/ou get_character_state()
+3. Évalue chaque trigger (probabilité 0.0 à 1.0)
+4. Vérifie les conditions (ex: "relation > 5", "alcool in possession")
+5. Retourne le JSON final avec les résultats
+
+FORMAT DE RÉPONSE OBLIGATOIRE:
 {{
-  "input_trigger_probs": {{...}},
-  "activated_input_triggers": [...],
-  "refused_input_triggers": [
-    {{"trigger": "...", "reason_refused": "..."}}
-  ]
-}}
-"""
-
-        # LLM avec tools (ReAct-style)
-        result = tool_bound_llm.invoke([
-            ("system", system_prompt),
-            ("user", user_prompt)
-        ])
+    "input_trigger_probs": {{"bye": 0.0, "ask_for_money": 0.0, "give_alcool": 0.0, "ask_for_treasure": 0.0}},
+    "activated_input_triggers": ["trigger_name"],
+    "refused_input_triggers": [{{"trigger": "trigger_name", "reason_refused": "raison"}}]
+}}"""
 
         try:
-            final_json = extract_json_block(result)
+            # Invoque le LLM avec tools
+            messages = [
+                ("system", system_prompt),
+                ("user", user_prompt)
+            ]
+            
+            response = tool_bound_llm.invoke(messages)
+            
+            # 🔧 SOLUTION: Gestion complète des tool calls
+            if hasattr(response, 'tool_calls') and response.tool_calls:
+                print(f"🔧 Tool calls détectés: {len(response.tool_calls)}")
+                
+                # Exécute les tool calls
+                messages_with_tools = list(messages)
+                messages_with_tools.append(response)
+                
+                for tool_call in response.tool_calls:
+                    print(f"🔧 Exécution du tool: {tool_call['name']}")
+                    
+                    # Trouve et exécute le tool
+                    tool_result = None
+                    for tool in tools:
+                        if tool.name == tool_call['name']:
+                            try:
+                                tool_result = tool.func()
+                                print(f"✅ Tool {tool_call['name']} exécuté avec succès")
+                                break
+                            except Exception as e:
+                                print(f"❌ Erreur tool {tool_call['name']}: {e}")
+                                tool_result = f"Erreur: {e}"
+                    
+                    # Ajoute le résultat du tool aux messages
+                    tool_message = ToolMessage(
+                        content=str(tool_result) if tool_result else "Aucun résultat",
+                        tool_call_id=tool_call['id']
+                    )
+                    messages_with_tools.append(tool_message)
+                
+                # Demande au LLM de continuer avec les résultats des tools
+                continuation_prompt = """Maintenant que tu as les données nécessaires, analyse les triggers et retourne le JSON final.
+
+Rappel du format obligatoire:
+{
+    "input_trigger_probs": {"bye": 0.0, "ask_for_money": 0.0, "give_alcool": 0.0, "ask_for_treasure": 0.0},
+    "activated_input_triggers": ["trigger_name"],
+    "refused_input_triggers": [{"trigger": "trigger_name", "reason_refused": "raison"}]
+}"""
+                
+                messages_with_tools.append(("user", continuation_prompt))
+                
+                # Nouvelle invocation sans tools pour obtenir le JSON final
+                final_response = llm_manager.get_llm().invoke(messages_with_tools)
+                
+                # Extrait le JSON de la réponse finale
+                if hasattr(final_response, 'content'):
+                    final_content = final_response.content
+                else:
+                    final_content = str(final_response)
+                
+                print(f"🔍 Réponse finale après tools: {final_content}")
+                
+            else:
+                # Pas de tool calls, utilise la réponse directe
+                if hasattr(response, 'content'):
+                    final_content = response.content
+                else:
+                    final_content = str(response)
+                
+                print(f"🔍 Réponse directe sans tools: {final_content}")
+            
+            # Parse le JSON final
+            final_json = extract_json_block(final_content)
+            
+            if not final_json:
+                raise ValueError("Aucun JSON trouvé dans la réponse finale")
+            
             parsed = json.loads(final_json)
+            print(f"✅ Triggers parsés avec tools: {parsed}")
+            
         except Exception as e:
-            parsed = {
-                "input_trigger_probs": {},
-                "activated_input_triggers": [],
-                "refused_input_triggers": [{"trigger": "ALL", "reason_refused": f"Erreur LLM: {e}"}]
-            }
+            print(f"❌ Erreur avec la version tools: {e}")
+            
+            # Fallback vers analyse simple
+            print("🔄 Basculement vers analyse simple...")
+
+        # Validation et nettoyage des résultats
+        parsed = validate_and_clean_trigger_results(parsed, triggers)
 
         # Injection dans le state
         state["input_trigger_probs"] = parsed.get("input_trigger_probs", {})
         state["activated_input_triggers"] = parsed.get("activated_input_triggers", [])
         state["refused_input_triggers"] = parsed.get("refused_input_triggers", [])
-        state["processing_steps"].append("interpret_triggers")
+        state["processing_steps"].append("interpret_triggers_with_tools")
 
         return state
 
     return fn
+
 
 config = get_config()
 def interpret_player_input_node(llm_manager: LLMManager):
@@ -292,22 +395,59 @@ def _analyze_message_intent(message: str) -> str:
     return "general"
 
 
+def validate_and_clean_trigger_results(parsed: dict, triggers: dict) -> dict:
+    """Valide et nettoie les résultats des triggers"""
+    
+    # Assure que toutes les clés existent
+    if "input_trigger_probs" not in parsed:
+        parsed["input_trigger_probs"] = {}
+    if "activated_input_triggers" not in parsed:
+        parsed["activated_input_triggers"] = []
+    if "refused_input_triggers" not in parsed:
+        parsed["refused_input_triggers"] = []
+    
+    # Assure que tous les triggers sont présents dans les probabilités
+    for trigger_name in triggers.keys():
+        if trigger_name not in parsed["input_trigger_probs"]:
+            parsed["input_trigger_probs"][trigger_name] = 0.0
+    
+    # Nettoie les triggers inexistants
+    valid_triggers = set(triggers.keys())
+    parsed["activated_input_triggers"] = [
+        t for t in parsed["activated_input_triggers"] 
+        if t in valid_triggers
+    ]
+    
+    return parsed
+
 def extract_json_block(text: str) -> str:
     """
     Extrait le contenu JSON entre la première accolade ouvrante { et
     la dernière accolade fermante }, même si le texte a des préfixes ou suffixes.
-
-    Args:
-        text: Le texte brut retourné par le LLM.
-
-    Returns:
-        Une chaîne contenant le JSON extrait, ou une chaîne vide si non trouvée.
     """
     try:
-        # Match non-gourmand entre { et }
-        match = re.search(r"\{.*\}", text, re.DOTALL)
-        if match:
-            return match.group(0)
+        text = str(text)
+        
+        # Nettoyer le texte
+        text = text.strip()
+        
+        # Chercher le JSON avec différentes approches
+        # 1. Entre ``` json et ```
+        json_block_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
+        if json_block_match:
+            return json_block_match.group(1)
+        
+        # 2. Match simple entre { et }
+        json_match = re.search(r'\{.*\}', text, re.DOTALL)
+        if json_match:
+            return json_match.group(0)
+        
+        # 3. Si le texte commence déjà par {
+        if text.startswith('{'):
+            return text
+            
+        return ""
+        
     except Exception as e:
         print(f"⚠️ Erreur lors de l'extraction JSON: {e}")
-    return ""
+        return ""
