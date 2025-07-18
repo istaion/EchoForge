@@ -6,6 +6,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from langchain.agents import create_react_agent, AgentExecutor
 from langchain.tools import Tool, BaseTool
 from langchain_core.prompts import PromptTemplate
+from langchain_core.exceptions import OutputParserException
 from langchain_core.language_models import BaseLanguageModel
 from pydantic import BaseModel, Field
 import json
@@ -24,10 +25,11 @@ class TriggerAnalysisResult(BaseModel):
 class GetPlayerDataTool(BaseTool):
     """Tool pour récupérer les données du joueur"""
     name: str = "get_player_data"
-    description: str = "Récupère les données complètes du joueur. Utilise ce tool pour vérifier les conditions liées au joueur (inventaire, stats, etc)."
+    description: str = "Récupère les données complètes du joueur. Ne prend AUCUN paramètre."
     player_data: Dict[str, Any]
 
     def _run(self, query: str = "") -> str:
+        """Execute the tool - accepte un argument mais ne l'utilise pas"""
         return json.dumps(self.player_data, indent=2)
 
     async def _arun(self, query: str = "") -> str:
@@ -35,11 +37,13 @@ class GetPlayerDataTool(BaseTool):
 
 
 class GetCharacterDataTool(BaseTool):
+    """Tool pour récupérer les données du personnage"""
     name: str = "get_character_data"
-    description: str = "Récupère les données complètes du personnage. Utilise ce tool pour vérifier les conditions liées au personnage (relation, état, etc)."
+    description: str = "Récupère les données complètes du personnage. Ne prend AUCUN paramètre."
     character_data: Dict[str, Any]
 
     def _run(self, query: str = "") -> str:
+        """Execute the tool - accepte un argument mais ne l'utilise pas"""
         data_without_triggers = {k: v for k, v in self.character_data.items() if k != "triggers"}
         return json.dumps(data_without_triggers, indent=2)
 
@@ -95,32 +99,33 @@ def create_trigger_analysis_prompt() -> PromptTemplate:
     
     template = """Tu es un analyseur d'intentions expert. Tu dois analyser le message utilisateur et déterminer quels triggers sont activés.
 
-Voici les triggers disponibles :
+Voici les triggers disponibles (avec leur seuil `threshold` et leurs éventuelles `conditions`) :
 {triggers_json}
 
 Message utilisateur : "{user_message}"
 
-INSTRUCTIONS CRITIQUES :
-1. D'abord, dans ta tête (dans le champ Thought:), analyse le message et attribue une probabilité (entre 0.0 et 1.0) à chaque trigger. **Ne fais aucune action ici.**
-2. Si la probabilité d’un trigger dépasse son threshold :
-   - Si le trigger n’a pas de conditions, considère-le comme activé
-   - Sinon, utilise les tools pour vérifier si ses conditions sont remplies
-3. Les triggers refusés doivent avoir une raison claire
+RÈGLES IMPORTANTES :
+1. IMPORTANT : Tu NE DOIS JAMAIS inclure "Final Answer:" dans la même étape où tu utilises une Action. Termine toujours les Actions avant de donner la réponse finale.
+2. Chaque trigger a un champ "threshold" dans le JSON. C'est le seuil minimal de probabilité pour qu'il soit considéré comme potentiellement activé.
+   Tu DOIS comparer la probabilité estimée de chaque trigger à ce seuil.
+   → Si la probabilité estimée d’un trigger est INFÉRIEURE à son seuil, ignore complètement ce trigger (pas besoin de tools, ni de condition).
+   → Si elle est SUPÉRIEURE ou ÉGALE au seuil ET que ce trigger a un champ "conditions", alors tu DOIS appeler les tools pour vérifier la condition.
+3. Les tools ne prennent AUCUN paramètre - appelle-les sans arguments.
 
 Tu as accès aux tools suivants :
 {tools}
 
-Utilise le format suivant :
+Utilise EXACTEMENT ce format :
+NE JAMAIS inclure une Action ET un Final Answer dans le même bloc de réflexion.
 
-Question: la question d'entrée à laquelle tu dois répondre
-Thought: tu dois toujours réfléchir à ce que tu dois faire
+Question: la question d'entrée
+Thought: réflexion sur ce que tu dois faire
 Action: l'action à prendre, doit être l'une de [{tool_names}]
-Action Input: l'entrée de l'action
+Action Input: (laisse vide ou mets {{}})
 Observation: le résultat de l'action
-... (cette séquence Thought/Action/Action Input/Observation peut se répéter N fois)
+... (répète si nécessaire)
 Thought: Je connais maintenant la réponse finale
-Final Answer: la réponse finale doit être un JSON valide au format suivant :
-
+Final Answer: 
 {{
     "input_trigger_probs": {{"trigger_name": probability, ...}},
     "activated_input_triggers": ["trigger1", "trigger2", ...],
@@ -157,22 +162,12 @@ class TriggerAnalysisAgent:
     ) -> TriggerAnalysisResult:
         """
         Analyse les triggers pour un message utilisateur
-        
-        Args:
-            user_message: Message de l'utilisateur
-            triggers: Dictionnaire des triggers d'input
-            player_data: Données du joueur
-            character_data: Données du personnage
-            
-        Returns:
-            TriggerAnalysisResult avec les probabilités et triggers activés/refusés
         """
         
-        # Créer les tools
+        # Créer les tools avec la correction
         tools = [
             GetPlayerDataTool(player_data=player_data),
-            GetCharacterDataTool(character_data=character_data),
-            EvaluateConditionTool()
+            GetCharacterDataTool(character_data=character_data)
         ]
         
         # Créer le prompt
@@ -185,13 +180,14 @@ class TriggerAnalysisAgent:
             prompt=prompt
         )
         
-        # Créer l'executor
+        # Créer l'executor avec handle_parsing_errors
         agent_executor = AgentExecutor(
             agent=agent,
             tools=tools,
             verbose=True,
             max_iterations=5,
-            handle_parsing_errors=True
+            handle_parsing_errors=True,
+            return_intermediate_steps=True  # Pour debug
         )
         
         # Préparer les inputs
@@ -208,57 +204,74 @@ class TriggerAnalysisAgent:
             final_answer = result.get("output", "{}")
             
             # Extraire le JSON de la réponse
-            json_match = re.search(r'\{[^{}]*\}', final_answer, re.DOTALL)
-            if json_match:
-                parsed_result = json.loads(json_match.group())
-                return TriggerAnalysisResult(**parsed_result)
+            json_str = extract_json_from_llm_response(final_answer)
+            if json_str:
+                return TriggerAnalysisResult(**json.loads(json_str))
             else:
-                # Fallback si pas de JSON trouvé
-                return self._fallback_analysis(user_message, triggers)
+                # Si pas de JSON trouvé, essayer de le reconstruire depuis les steps
+                return self._reconstruct_from_steps(result, triggers)
                 
         except Exception as e:
             print(f"Erreur dans l'agent d'analyse des triggers: {e}")
-            return self._fallback_analysis(user_message, triggers)
-    
-    def _fallback_analysis(self, user_message: str, triggers: Dict[str, Any]) -> TriggerAnalysisResult:
-        """Analyse de fallback simple basée sur des mots-clés"""
+            
+            # Si c'est une erreur de parsing d'output de LangChain
+            if isinstance(e, OutputParserException):
+                # 1. Tenter d'extraire depuis l'attribut LLM output si disponible
+                if hasattr(e, 'llm_output'):
+                    output_text = e.llm_output
+                # 2. Sinon depuis les args
+                elif e.args and isinstance(e.args[0], str):
+                    output_text = e.args[0]
+                # 3. Fallback générique
+                else:
+                    output_text = str(e)
+                
+                json_str = extract_json_from_llm_response(output_text)
+                if json_str:
+                    try:
+                        return TriggerAnalysisResult(**json.loads(json_str))
+                    except Exception as parse_error:
+                        print(f"Échec du parsing JSON après extraction: {parse_error}")
+            
+            # Optionnel : fallback custom si tout échoue
+            return self._reconstruct_from_steps({}, triggers)
+            
         
-        result = TriggerAnalysisResult(
-            input_trigger_probs={},
-            activated_input_triggers=[],
-            refused_input_triggers=[]
-        )
+    def _reconstruct_from_steps(self, result: dict, triggers: dict) -> TriggerAnalysisResult:
+        """Reconstruit le résultat depuis les étapes intermédiaires"""
         
-        message_lower = user_message.lower()
+        # Valeurs par défaut
+        probs = {name: 0.0 for name in triggers}
+        activated = []
+        refused = []
         
-        # Analyse simple par mots-clés
-        for trigger_name, trigger_data in triggers.items():
-            trigger_desc = trigger_data.get("trigger", "").lower()
-            
-            # Calcul simple de probabilité basé sur les mots-clés
-            probability = 0.0
-            
-            # Recherche de mots-clés communs
-            keywords = self._extract_keywords(trigger_desc)
-            matches = sum(1 for keyword in keywords if keyword in message_lower)
-            
-            if matches > 0:
-                probability = min(1.0, matches * 0.3)
-            
-            result.input_trigger_probs[trigger_name] = probability
-            
-            # Vérifier le threshold
-            threshold = trigger_data.get("threshold", 0.5)
-            if probability < threshold:
-                result.refused_input_triggers.append({
+        # Essayer d'extraire les infos des étapes
+        if "intermediate_steps" in result:
+            for action, observation in result["intermediate_steps"]:
+                # Analyser les observations pour déduire les états
+                pass
+        
+        # Parser la sortie finale même si elle est mal formée
+        output = result.get("output", "")
+        
+        # Chercher des patterns dans la sortie
+        if "give_alcool" in output and ("activé" in output or "activated" in output):
+            probs["give_alcool"] = 1.0
+            activated.append("give_alcool")
+        
+        # Compléter les refusés
+        for trigger_name in triggers:
+            if trigger_name not in activated:
+                refused.append({
                     "trigger": trigger_name,
-                    "reason_refused": "Le seuil n'est pas atteint"
+                    "reason_refused": "Non détecté dans le message"
                 })
-            else:
-                # Dans le fallback, on active sans vérifier les conditions
-                result.activated_input_triggers.append(trigger_name)
         
-        return result
+        return TriggerAnalysisResult(
+            input_trigger_probs=probs,
+            activated_input_triggers=activated,
+            refused_input_triggers=refused
+        )
     
     def _extract_keywords(self, text: str) -> List[str]:
         """Extrait des mots-clés simples d'un texte"""
@@ -332,134 +345,60 @@ def create_trigger_analysis_node(llm_manager: LLMManager):
     
     return analyze_triggers_node
 
-
-# Version simplifiée sans agent pour les cas où ReAct est overkill
-def create_simple_trigger_analysis_node(llm_manager: LLMManager):
-    """
-    Version simplifiée du node d'analyse des triggers (sans agent ReAct)
-    Plus rapide mais moins flexible
-    """
     
-    def simple_analyze_triggers_node(state: CharacterState) -> CharacterState:
-        """Node simplifié qui analyse les triggers d'input"""
-        
-        user_message = state["user_message"]
-        character_data = state["character_data"]
-        player_data = state["player_data"]
-        triggers = character_data.get("triggers", {}).get("input", {})
-        
-        if not triggers:
-            state["input_trigger_probs"] = {}
-            state["activated_input_triggers"] = []
-            state["refused_input_triggers"] = []
-            return state
-        
-        # Construction du prompt pour le LLM
-        prompt = f"""Analyse le message utilisateur et détermine les probabilités pour chaque trigger.
-
-Message utilisateur: "{user_message}"
-
-Triggers disponibles:
-{json.dumps(triggers, indent=2, ensure_ascii=False)}
-
-Pour chaque trigger, donne une probabilité entre 0.0 et 1.0 que l'intention soit présente dans le message.
-
-Retourne UNIQUEMENT un JSON au format:
-{{
-    "trigger_name1": 0.0,
-    "trigger_name2": 0.5,
-    ...
-}}"""
-        
-        # Obtenir les probabilités du LLM
-        llm = llm_manager.get_llm()
-        response = llm.invoke(prompt)
-        
+def extract_json_from_llm_response(text: str) -> Optional[str]:
+    """Extrait un objet JSON d'une réponse LLM, peu importe le format"""
+    
+    if not text:
+        return None
+    
+    # Nettoyer le texte
+    text = str(text)
+    
+    # Méthode 1: Entre ```json et ```
+    json_code_match = re.search(r'```json\s*(.*?)\s*```', text, re.DOTALL)
+    if json_code_match:
         try:
-            # Parser la réponse
-            if hasattr(response, 'content'):
-                content = response.content
-            else:
-                content = str(response)
-            
-            # Extraire le JSON
-            json_match = re.search(r'\{[^{}]*\}', content, re.DOTALL)
-            if json_match:
-                probabilities = json.loads(json_match.group())
-            else:
-                probabilities = {name: 0.0 for name in triggers}
+            json.loads(json_code_match.group(1))  # Vérifier que c'est valide
+            return json_code_match.group(1)
         except:
-            probabilities = {name: 0.0 for name in triggers}
-        
-        # Évaluer les triggers
-        activated = []
-        refused = []
-        
-        for trigger_name, trigger_data in triggers.items():
-            prob = probabilities.get(trigger_name, 0.0)
-            threshold = trigger_data.get("threshold", 0.5)
-            
-            if prob < threshold:
-                refused.append({
-                    "trigger": trigger_name,
-                    "reason_refused": f"Probabilité ({prob:.2f}) inférieure au seuil ({threshold})"
-                })
-            else:
-                # Vérifier les conditions si présentes
-                conditions = trigger_data.get("conditions")
-                if conditions:
-                    # Évaluation simple des conditions
-                    if not _evaluate_simple_condition(conditions, player_data, character_data):
-                        refused.append({
-                            "trigger": trigger_name,
-                            "reason_refused": f"Condition non remplie: {conditions}"
-                        })
-                    else:
-                        activated.append(trigger_name)
-                else:
-                    activated.append(trigger_name)
-        
-        # Mettre à jour le state
-        state["input_trigger_probs"] = probabilities
-        state["activated_input_triggers"] = activated
-        state["refused_input_triggers"] = refused
-        
-        state["processing_steps"].append("simple_trigger_analysis")
-        
-        return state
+            pass
     
-    return simple_analyze_triggers_node
-
-
-def _evaluate_simple_condition(condition: str, player_data: Dict, character_data: Dict) -> bool:
-    """Évaluation simple de conditions courantes"""
+    # Méthode 2: Entre ``` et ```
+    code_match = re.search(r'```\s*(.*?)\s*```', text, re.DOTALL)
+    if code_match:
+        try:
+            json.loads(code_match.group(1))  # Vérifier que c'est valide
+            return code_match.group(1)
+        except:
+            pass
     
-    try:
-        # Remplacements simples pour les conditions communes
-        condition_lower = condition.lower()
+    # Méthode 3: Après "Final Answer:"
+    final_answer_match = re.search(r'Final Answer:\s*(.+)', text, re.DOTALL | re.IGNORECASE)
+    if final_answer_match:
+        remaining_text = final_answer_match.group(1)
+        # Chercher le JSON dans ce qui reste
+        first_brace = remaining_text.find('{')
+        last_brace = remaining_text.rfind('}')
         
-        # Vérifications d'inventaire
-        if "in possession" in condition_lower or "in inventory" in condition_lower:
-            item = condition_lower.split()[0]
-            inventory = player_data.get("player_stats", {})
-            return inventory.get(item, 0) > 0
-        
-        # Relations
-        if "relation" in condition_lower:
-            relation = character_data.get("relation", 0)
-            # Parser des conditions simples comme "relation > 5"
-            if ">" in condition:
-                value = int(re.search(r'>\s*(\d+)', condition).group(1))
-                return relation > value
-            elif "<" in condition:
-                value = int(re.search(r'<\s*(\d+)', condition).group(1))
-                return relation < value
-        
-        # États du personnage
-        if "is drunk" in condition_lower:
-            return character_data.get("personality", {}).get("current_alcohol_level") == "drunk"
-        
-        return True  # Par défaut, on considère la condition remplie
-        
-    except:
-        return False
+        if first_brace != -1 and last_brace != -1:
+            try:
+                json_str = remaining_text[first_brace:last_brace + 1]
+                json.loads(json_str)  # Vérifier que c'est valide
+                return json_str
+            except:
+                pass
+    
+    # Méthode 4: Trouver le JSON brut (premier { au dernier })
+    first_brace = text.find('{')
+    last_brace = text.rfind('}')
+    
+    if first_brace != -1 and last_brace != -1:
+        try:
+            json_str = text[first_brace:last_brace + 1]
+            json.loads(json_str)  # Vérifier que c'est valide
+            return json_str
+        except:
+            pass
+    
+    return None

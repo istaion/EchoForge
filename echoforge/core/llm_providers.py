@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any, Union, List
 from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
+from langchain_mistralai import ChatMistralAI
 from langchain.schema import AIMessage
 from langchain_core.language_models.base import BaseLanguageModel
 from langchain_core.runnables import Runnable
@@ -104,6 +105,45 @@ class GroqToolsWrapper:
         
         return response
 
+class MistralProvider(LLMProvider):
+    """Provider LLM utilisant Mistral"""
+    
+    def __init__(self, api_key: str, model: str = "mistral-large-latest",
+                 temperature: float = 0.7):
+        self.api_key = api_key
+        self.model_name = model
+        self.temperature = temperature
+        self.llm = ChatMistralAI(
+            model=self.model_name,
+            api_key=self.api_key,
+            temperature=self.temperature
+        )
+    
+    def invoke(self, prompt: str) -> str:
+        """Génère une réponse à partir d'un prompt"""
+        try:
+            response = self.llm.invoke(prompt)
+            if isinstance(response, str):
+                return response.strip()
+            elif isinstance(response, AIMessage):
+                return response.content.strip()
+            else:
+                return str(response).strip()
+        except Exception as e:
+            return f"❌ Erreur LLM: {str(e)}"
+    
+    def get_model_info(self) -> Dict[str, Any]:
+        """Retourne les informations sur le modèle"""
+        return {
+            "provider": "Mistral",
+            "model": self.model_name,
+            "temperature": self.temperature,
+            "tools_support": "native"  # Support natif
+        }
+    
+    def get_langchain_llm(self) -> BaseLanguageModel:
+        """Retourne l'objet LLM LangChain natif"""
+        return self.llm
 
 class GroqProvider(LLMProvider):
     """Provider LLM utilisant Groq avec support tool calls amélioré"""
@@ -247,6 +287,12 @@ class LLMManager:
         elif provider == "openai":
             self.provider = OpenaiProvider(
                 api_key=self.config.openai_api_key,
+                model=self.config.llm_model,
+                temperature=self.config.llm_temperature
+            )
+        elif provider == "mistral":
+            self.provider = MistralProvider(
+                api_key=self.config.mistral_api_key,
                 model=self.config.llm_model,
                 temperature=self.config.llm_temperature
             )

@@ -2,7 +2,7 @@ from langgraph.graph import StateGraph, END
 from echoforge.agents.state.character_state import CharacterState
 from echoforge.agents.nodes.perception import perceive_input, interpret_player_input_node, decide_intent_node, interpret_character_output, interpret_triggers_input_node
 from echoforge.agents.nodes.rag_assessment import assess_rag_need, validate_rag_results
-from echoforge.agents.nodes.rag_search import perform_rag_search
+from echoforge.agents.nodes.rag_search import create_react_rag_node
 from echoforge.agents.nodes.response_generation import generate_simple_response, generate_response
 from echoforge.agents.nodes.triggers import create_trigger_analysis_node
 from echoforge.agents.nodes.memory_update import update_character_memory, finalize_interaction, load_memory_context, check_memory_integration
@@ -50,7 +50,7 @@ def create_character_graph_with_memory(character_name: str, enable_checkpointer:
     graph.add_node("perceive", perceive_input)
     
     # Analyse des triggers d'input
-    graph.add_node("interpret_input", create_trigger_analysis_node(llm_manager=LLMManager()))
+    graph.add_node("interpret_input", create_trigger_analysis_node(LLMManager()))
     # graph.add_node("interpret_input", interpret_player_input_node(llm_manager=LLMManager()))
     # graph.add_node("decide_intent", decide_intent_node())
     
@@ -58,14 +58,13 @@ def create_character_graph_with_memory(character_name: str, enable_checkpointer:
     graph.add_node("check_memory_integration", check_memory_integration)
     
     # Nœuds de réponse selon la complexité
-    graph.add_node("simple_response", generate_simple_response)
-    graph.add_node("assess_rag_need", assess_rag_need)
-    graph.add_node("rag_search", perform_rag_search(llm_manager=LLMManager()))
+    graph.add_node("react_rag_agent", create_react_rag_node(LLMManager()))
     graph.add_node("validate_rag_results", validate_rag_results)
+    graph.add_node("simple_response", generate_simple_response)
     graph.add_node("generate_response", generate_response)
     
     # Nœuds de finalisation avec système de mémoire
-    graph.add_node("interpret_output", interpret_character_output(llm_manager=LLMManager()))
+    graph.add_node("interpret_output", interpret_character_output(LLMManager()))
     graph.add_node("memory_update", update_character_memory)
     graph.add_node("finalize", finalize_interaction)
     
@@ -86,30 +85,30 @@ def create_character_graph_with_memory(character_name: str, enable_checkpointer:
         route_by_complexity,
         {
             "simple_response": "simple_response",
-            "assess_rag_need": "assess_rag_need"
+            "assess_rag_need": "react_rag_agent"
         }
     )
+    graph.add_edge("react_rag_agent","generate_response")
+    # # Depuis l'évaluation RAG, routage selon le besoin
+    # graph.add_conditional_edges(
+    #     "assess_rag_need", 
+    #     route_by_rag_need,
+    #     {
+    #         "rag_search": "rag_search",
+    #         "generate_response": "generate_response"
+    #     }
+    # )
     
-    # Depuis l'évaluation RAG, routage selon le besoin
-    graph.add_conditional_edges(
-        "assess_rag_need", 
-        route_by_rag_need,
-        {
-            "rag_search": "rag_search",
-            "generate_response": "generate_response"
-        }
-    )
-    
-    # Depuis la recherche RAG, vers la génération de réponse
-    graph.add_edge("rag_search", "validate_rag_results")
-    graph.add_conditional_edges(
-        "validate_rag_results",
-        check_if_needs_new_rag,
-        {
-            "rag_retry": "rag_search",
-            "generate_response": "generate_response"
-        }
-    )
+    # # Depuis la recherche RAG, vers la génération de réponse
+    # graph.add_edge("rag_search", "validate_rag_results")
+    # graph.add_conditional_edges(
+    #     "validate_rag_results",
+    #     check_if_needs_new_rag,
+    #     {
+    #         "rag_retry": "rag_search",
+    #         "generate_response": "generate_response"
+    #     }
+    # )
     
     # Depuis les réponses, routage vers mémoire ou finalisation
     graph.add_edge("simple_response", "interpret_output")

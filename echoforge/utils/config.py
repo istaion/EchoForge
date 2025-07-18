@@ -24,8 +24,9 @@ class EchoForgeConfig(BaseSettings):
     ollama_model: str = Field(default="llama3.1:8b", description="Modèle Ollama")
     groq_model: str = Field(default="llama-3.1-8b-instant", description="Modèle Groq")
     openai_model: str = Field(default="gpt-3.5-turbo", description="Modèle OpenAI")
+    mistral_model: str = Field(default="mistral-large-latest", description="Modèle mistral")
     llm_model: str = Field(default="llama-3.1-8b-instant", description="Modèle par défaut")
-    llm_provider: str = Field(default="groq", description="Provider LLM (ollama, groq, openai)")
+    llm_provider: str = Field(default="groq", description="Provider LLM (ollama, groq, openai, mistral)")
     llm_temperature: float = Field(default=0.7, description="Température du LLM")
     
     # Configuration RAG
@@ -104,6 +105,7 @@ class EchoForgeConfig(BaseSettings):
     # API Keys
     groq_api_key: Optional[str] = Field(default=None, description="Clé API Groq")
     openai_api_key: Optional[str] = Field(default=None, description="Clé API OpenAI")
+    mistral_api_key: Optional[str] = Field(default=None, description="Clé API MistralAI")
     
     # LangSmith Configuration
     langsmith_tracing: bool = Field(default=True, description="Activer le tracing LangSmith")
@@ -141,6 +143,8 @@ class EchoForgeConfig(BaseSettings):
             self.llm_model = self.groq_model
         elif self.llm_provider == "openai":
             self.llm_model = self.openai_model
+        elif self.llm_provider == "mistral":
+            self.llm_model = self.mistral_model
         else:
             self.llm_model = self.ollama_model
     

@@ -146,7 +146,7 @@ def _build_comprehensive_prompt(state: CharacterState) -> str:
     conversation_history = state.get("conversation_history", [])
     all_triggers = state["character_data"].get("triggers", {}).get("input", {})
     activated = state.get("activated_input_triggers", []) or []
-    refused = [t for t in all_triggers.keys() if t not in activated]
+    refused = state.get("refused_input_triggers", []) or []
     
     # 🆕 Récupération du contexte de mémoire
     context_summary = state.get("context_summary")
@@ -159,6 +159,12 @@ def _build_comprehensive_prompt(state: CharacterState) -> str:
         return "\n".join([
             f"- {trigger}: {all_triggers[trigger].get('trigger')} → effet attendu : {all_triggers[trigger].get('effect')}"
             for trigger in trigger_names if trigger in all_triggers
+        ]) or "Aucune"
+    
+    def format_refused_trigger_list(refused_dict : list):
+        return "\n".join([
+            f"- {trigger.get('trigger')} → refusé car : {trigger.get('reason_refused')}"
+            for trigger in refused_dict
         ]) or "Aucune"
     
     # Construction des sections du prompt
@@ -233,7 +239,7 @@ INTENTIONS DÉTECTÉES DANS LE MESSAGE DU JOUEUR :
 {format_trigger_list(activated)}
 
 - Intentions non activées (refusées ou ignorées) :
-{format_trigger_list(refused)}
+{format_refused_trigger_list(refused)}
 """
 
     # 6. Instructions spécifiques avec intégration mémoire et restrictions
