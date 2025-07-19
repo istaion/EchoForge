@@ -111,7 +111,21 @@ class EchoForgeRAG:
         """Récupère le contexte d'un personnage pour une requête"""
         store_id = f"character_{character_id}"
         store = self.vector_store_manager.get_store(store_id)
+        
+        print(f"🔍 Recherche dans {store_id} avec query: '{query}'")
+        
         if not store:
+            print(f"❌ Store {store_id} non trouvé!")
+            return []
+        
+        try:
+            docs = store.similarity_search(query, k=top_k)
+            print(f"📄 {len(docs)} documents trouvés")
+            for doc in docs:
+                print(f"  - {doc.page_content[:100]}...")
+            return [doc.page_content for doc in docs]
+        except Exception as e:
+            print(f"⚠️ Erreur lors de la récupération du contexte de {character_id}: {e}")
             return []
         
         try:

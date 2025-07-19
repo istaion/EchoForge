@@ -223,7 +223,7 @@ class CharacterGraphManager:
         Returns:
             État final avec la réponse générée
         """
-        character_name = character_data.get("name", "unknown")
+        character_name = character_data.get("character_name", "unknown")
         
         # Récupération du graphe avec mémoire
         graph = self.get_or_create_graph(character_name)
@@ -369,7 +369,7 @@ class CharacterGraphManager:
             player_data=player_data,
 
             # Personnage
-            character_name=character_data.get("name", "unknown"),
+            character_name=character_data.get("character_name", "unknown"),
             character_data=character_data,
             
             # Conversation avec persistance

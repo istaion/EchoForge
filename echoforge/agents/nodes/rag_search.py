@@ -1,8 +1,3 @@
-"""
-Agent ReAct pour la recherche RAG intelligente dans EchoForge.
-Remplace assess_rag_need, validate_rag_results et rag_search avec une approche unifiée.
-"""
-
 from typing import Dict, Any, List, Optional, Tuple
 from langchain.agents import create_react_agent, AgentExecutor, AgentType
 from langchain.tools import Tool, BaseTool
@@ -17,20 +12,20 @@ from echoforge.utils.config import get_config
 from langsmith import traceable
 
 
-class RAGSearchTool(BaseTool):
-    """Tool pour effectuer une recherche RAG"""
-    name: str = "search_knowledge"
-    description: str = "Recherche dans la base de connaissances. Prend une requête en paramètre."
+class SearchWorldKnowledgeTool(BaseTool):
+    """Tool pour rechercher dans les connaissances du monde"""
+    name: str = "search_world"
+    description: str = "Recherche dans les connaissances générales du monde et de l'île. Utilise pour : histoire, lieux, événements globaux."
     rag_system: EchoForgeRAG
-    character_name: str
+    evaluate_tool: Optional['EvaluateRelevanceTool'] = None
     
     def _run(self, query: str) -> str:
-        """Execute la recherche RAG"""
+        """Execute la recherche dans le monde"""
         try:
             results = []
             
-            # Recherche dans les connaissances du monde
-            world_context = self.rag_system.retrieve_world_context(query, top_k=3)
+            # Recherche uniquement dans les connaissances du monde
+            world_context = self.rag_system.retrieve_world_context(query, top_k=5)
             for i, content in enumerate(world_context):
                 results.append({
                     "content": content,
@@ -38,7 +33,44 @@ class RAGSearchTool(BaseTool):
                     "relevance": "high" if i == 0 else "medium"
                 })
             
-            # Recherche dans les connaissances du personnage
+            results_json = json.dumps(results, indent=2, ensure_ascii=False)
+            
+            # Stocker les résultats pour l'outil d'évaluation
+            if self.evaluate_tool:
+                # Ajouter aux résultats existants ou créer
+                if hasattr(self.evaluate_tool, 'last_results') and self.evaluate_tool.last_results:
+                    try:
+                        existing = json.loads(self.evaluate_tool.last_results)
+                        existing.extend(results)
+                        self.evaluate_tool.last_results = json.dumps(existing, indent=2, ensure_ascii=False)
+                    except:
+                        self.evaluate_tool.last_results = results_json
+                else:
+                    self.evaluate_tool.last_results = results_json
+            
+            return results_json
+            
+        except Exception as e:
+            return f"Erreur lors de la recherche monde: {str(e)}"
+    
+    async def _arun(self, query: str) -> str:
+        return self._run(query)
+
+
+class SearchCharacterKnowledgeTool(BaseTool):
+    """Tool pour rechercher dans les connaissances du personnage"""
+    name: str = "search_character"
+    description: str = "Recherche dans les connaissances personnelles du personnage. Utilise pour : souvenirs, relations, secrets personnels, enfance."
+    rag_system: EchoForgeRAG
+    character_name: str
+    evaluate_tool: Optional['EvaluateRelevanceTool'] = None
+    
+    def _run(self, query: str) -> str:
+        """Execute la recherche sur le personnage"""
+        try:
+            results = []
+            
+            # Recherche uniquement dans les connaissances du personnage
             character_context = self.rag_system.retrieve_character_context(
                 query, self.character_name.lower(), top_k=5
             )
@@ -49,10 +81,25 @@ class RAGSearchTool(BaseTool):
                     "relevance": "high" if i == 0 else "medium"
                 })
             
-            return json.dumps(results[:5], indent=2, ensure_ascii=False)
+            results_json = json.dumps(results, indent=2, ensure_ascii=False)
+            
+            # Stocker les résultats pour l'outil d'évaluation
+            if self.evaluate_tool:
+                # Ajouter aux résultats existants ou créer
+                if hasattr(self.evaluate_tool, 'last_results') and self.evaluate_tool.last_results:
+                    try:
+                        existing = json.loads(self.evaluate_tool.last_results)
+                        existing.extend(results)
+                        self.evaluate_tool.last_results = json.dumps(existing, indent=2, ensure_ascii=False)
+                    except:
+                        self.evaluate_tool.last_results = results_json
+                else:
+                    self.evaluate_tool.last_results = results_json
+            
+            return results_json
             
         except Exception as e:
-            return f"Erreur lors de la recherche: {str(e)}"
+            return f"Erreur lors de la recherche personnage: {str(e)}"
     
     async def _arun(self, query: str) -> str:
         return self._run(query)
@@ -61,33 +108,46 @@ class RAGSearchTool(BaseTool):
 class EvaluateRelevanceTool(BaseTool):
     """Tool pour évaluer la pertinence des résultats"""
     name: str = "evaluate_relevance"
-    description: str = "Évalue si les résultats de recherche sont suffisants pour répondre à la question. Retourne 'sufficient' ou 'insufficient'."
+    description: str = "Évalue si les derniers résultats de recherche sont suffisants pour répondre. Ne prend aucun paramètre."
+    last_results: Optional[str] = None
     
-    def _run(self, user_question: str, search_results: str) -> str:
-        """Évalue la pertinence des résultats"""
-        # Cette évaluation sera faite par le LLM via le prompt
-        # On retourne juste une structure pour que l'agent puisse décider
+    def _run(self, query: str = "") -> str:
+        """Évalue la pertinence des derniers résultats"""
+        if not self.last_results:
+            return "error - aucun résultat à évaluer"
+            
         try:
-            results = json.loads(search_results)
+            results = json.loads(self.last_results)
             if not results:
                 return "insufficient - aucun résultat trouvé"
             
             # Analyse basique pour aider l'agent
-            has_character_info = any(r.get("source", "").startswith(r.get("character_name", "")) for r in results)
+            has_high_relevance = any(r.get("relevance") == "high" for r in results)
+            has_character_info = any("_knowledge" in r.get("source", "") for r in results)
             has_world_info = any(r.get("source") == "world_knowledge" for r in results)
+            has_content = all(r.get("content", "").strip() for r in results)
             
-            if has_character_info and has_world_info:
-                return "sufficient - informations personnage et monde disponibles"
-            elif has_character_info or has_world_info:
-                return "partial - informations partielles disponibles"
+            if has_high_relevance and has_content:
+                info_type = []
+                if has_character_info:
+                    info_type.append("personnage")
+                if has_world_info:
+                    info_type.append("monde")
+                return f"sufficient - informations pertinentes trouvées ({' et '.join(info_type)})"
+            elif has_content:
+                return "partial - informations trouvées mais pertinence moyenne"
             else:
-                return "insufficient - informations manquantes"
+                return "insufficient - informations insuffisantes ou non pertinentes"
                 
-        except:
-            return "error - impossible d'évaluer"
+        except Exception as e:
+            return f"error - impossible d'évaluer: {str(e)}"
     
-    async def _arun(self, user_question: str, search_results: str) -> str:
-        return self._run(user_question, search_results)
+    def reset(self):
+        """Réinitialise les résultats stockés"""
+        self.last_results = None
+    
+    async def _arun(self, query: str = "") -> str:
+        return self._run(query)
 
 
 class AnalyzeQuestionTool(BaseTool):
@@ -106,7 +166,7 @@ class AnalyzeQuestionTool(BaseTool):
             "historical": ["histoire", "passé", "avant", "autrefois", "origine"],
             "relationship": ["relation", "ami", "ennemi", "famille", "connais"],
             "location": ["où", "lieu", "endroit", "trouve", "situé"],
-            "personality": ["caractère", "personnalité", "comportement", "pourquoi"],
+            "personality": ["caractère", "personnalité", "comportement", "pourquoi", "toi", "enfance"],
             "action": ["faire", "peut", "capable", "donne", "aide"],
             "knowledge": ["sais", "connais", "explique", "raconte", "parle"]
         }
@@ -119,10 +179,13 @@ class AnalyzeQuestionTool(BaseTool):
         # Extraction de mots-clés importants
         important_words = [w for w in question.split() if len(w) > 3 and w.lower() not in ["pour", "avec", "dans", "mais"]]
         
+        # Détection spéciale pour questions personnelles
+        needs_personal = any(word in question_lower for word in ["toi", "ton", "ta", "tes", "enfance", "passé"])
+        
         return json.dumps({
             "question_types": detected_types,
             "keywords": important_words[:5],
-            "needs_personal_info": "personality" in detected_types or "relationship" in detected_types,
+            "needs_personal_info": needs_personal,
             "needs_world_info": "location" in detected_types or "historical" in detected_types
         }, ensure_ascii=False)
     
@@ -158,13 +221,16 @@ PROCESSUS DE DÉCISION:
 
 2. Si recherche nécessaire:
    - Utilise analyze_question pour comprendre la question
-   - Utilise search_knowledge avec une requête optimisée
-   - Utilise evaluate_relevance pour vérifier les résultats
-   - Si insuffisants, reformule et recherche à nouveau (max 3 tentatives)
+   - Choisis le(s) bon(s) outil(s):
+     * search_world pour : histoire de l'île, lieux, événements globaux
+     * search_character pour : souvenirs personnels, enfance, relations, secrets
+     * Tu peux utiliser les DEUX si la question touche aux deux aspects
+   - Utilise evaluate_relevance (sans paramètres) après TOUTES les recherches
+   - Si insuffisant, reformule et recherche à nouveau (max 3 tentatives)
 
 3. Format de réponse:
    - Si aucune recherche effectuée → relevant_knowledge: []
-   - Si recherche effectuée → inclure les contenus pertinents trouvés
+   - Si recherche effectuée → inclure TOUS les contenus pertinents trouvés
 
 Utilise EXACTEMENT ce format:
 Question: la question d'entrée
@@ -193,6 +259,60 @@ Final Answer: {{
     "search_queries": [],
     "evaluation": "none",
     "reasoning": "Salutation simple ne nécessitant pas de recherche"
+}}
+
+EXEMPLE pour une question personnelle:
+Question: Parle-moi de ton enfance
+Thought: L'utilisateur demande des informations personnelles sur mon enfance. Je dois chercher dans mes connaissances personnelles.
+Action: analyze_question
+Action Input: "Parle-moi de ton enfance"
+Observation: {{"question_types": ["personality", "knowledge"], "keywords": ["Parle-moi", "enfance"], "needs_personal_info": true, "needs_world_info": false}}
+
+Thought: L'analyse confirme que c'est une question personnelle. Je dois rechercher dans mes souvenirs personnels.
+Action: search_character
+Action Input: "enfance passé souvenirs famille jeunesse"
+Observation: [résultats sur l'enfance du personnage]
+
+Thought: J'ai trouvé des informations sur mon enfance. Je dois évaluer si c'est suffisant.
+Action: evaluate_relevance
+Action Input: 
+Observation: sufficient - informations pertinentes trouvées (personnage)
+
+Thought: Je connais maintenant la réponse finale
+Final Answer: {{
+    "needs_rag": true,
+    "search_performed": true,
+    "relevant_knowledge": ["contenu sur l'enfance trouvé"],
+    "search_queries": ["enfance passé souvenirs famille jeunesse"],
+    "evaluation": "sufficient",
+    "reasoning": "Question personnelle sur l'enfance nécessitant des recherches dans les souvenirs du personnage"
+}}
+
+EXEMPLE pour une question mixte:
+Question: Comment ton enfance sur l'île t'a-t-elle influencé?
+Thought: Cette question touche à la fois l'enfance personnelle ET l'histoire de l'île. Je dois rechercher dans les deux.
+Action: search_character
+Action Input: "enfance influence personnalité formation"
+Observation: [résultats personnels]
+
+Thought: J'ai des infos personnelles, mais je dois aussi chercher sur l'île.
+Action: search_world  
+Action Input: "île histoire événements période enfance"
+Observation: [résultats sur l'île]
+
+Thought: J'ai maintenant des infos des deux sources. Vérifions si c'est suffisant.
+Action: evaluate_relevance
+Action Input:
+Observation: sufficient - informations pertinentes trouvées (personnage et monde)
+
+Thought: Je connais maintenant la réponse finale
+Final Answer: {{
+    "needs_rag": true,
+    "search_performed": true,
+    "relevant_knowledge": ["infos enfance personnage", "contexte historique île"],
+    "search_queries": ["enfance influence personnalité formation", "île histoire événements période enfance"],
+    "evaluation": "sufficient",
+    "reasoning": "Question mixte nécessitant des recherches personnelles et contextuelles"
 }}
 
 Commence!
@@ -237,10 +357,20 @@ class ReactRAGAgent:
         """
         
         # Créer les tools
+        evaluate_tool = EvaluateRelevanceTool()
+        
         tools = [
             AnalyzeQuestionTool(),
-            RAGSearchTool(rag_system=self.rag_system, character_name=character_name),
-            EvaluateRelevanceTool()
+            SearchWorldKnowledgeTool(
+                rag_system=self.rag_system,
+                evaluate_tool=evaluate_tool
+            ),
+            SearchCharacterKnowledgeTool(
+                rag_system=self.rag_system, 
+                character_name=character_name,
+                evaluate_tool=evaluate_tool
+            ),
+            evaluate_tool
         ]
         
         # Créer le prompt
@@ -258,10 +388,9 @@ class ReactRAGAgent:
             agent=agent,
             tools=tools,
             verbose=True,
-            max_iterations=6,  # Permet jusqu'à 3 recherches
+            max_iterations=4,  # Réduit pour éviter les boucles
             handle_parsing_errors=True,
-            max_execution_time=30,  # Timeout de 30 secondes
-            early_stopping_method="generate"  # Génère une réponse si max_iterations atteint
+            max_execution_time=30  # Timeout de 30 secondes
         )
         
         # Exécuter l'agent
@@ -383,6 +512,8 @@ def create_react_rag_node(llm_manager: LLMManager):
         return state
     
     return react_rag_node
+
+
 # """Nœud de recherche RAG."""
 
 # from typing import List, Dict, Any
