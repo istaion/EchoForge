@@ -1,7 +1,7 @@
 from langgraph.graph import StateGraph, END
 from echoforge.agents.state.character_state import CharacterState
-from echoforge.agents.nodes.perception import perceive_input, interpret_player_input_node, decide_intent_node, interpret_character_output, interpret_triggers_input_node
-from echoforge.agents.nodes.rag_assessment import assess_rag_need, validate_rag_results
+from echoforge.agents.nodes.perception import perceive_input, evolve_character_relation, interpret_character_output
+from echoforge.agents.nodes.rag_assessment import validate_rag_results
 from echoforge.agents.nodes.rag_search import create_react_rag_node
 from echoforge.agents.nodes.response_generation import generate_simple_response, generate_response
 from echoforge.agents.nodes.triggers import create_trigger_analysis_node
@@ -9,9 +9,7 @@ from echoforge.agents.nodes.memory_update import update_character_memory, finali
 from echoforge.agents.checkpointers.postgres_checkpointer import create_safe_checkpointer, NoOpCheckpointSaver
 from langsmith import traceable
 from echoforge.agents.conditions.complexity_router import (
-    route_by_complexity, 
-    route_by_rag_need, 
-    check_if_needs_new_rag
+    route_by_complexity
 )
 from echoforge.core.llm_providers import LLMManager
 from echoforge.utils.config import get_config
@@ -51,6 +49,7 @@ def create_character_graph_with_memory(character_name: str, enable_checkpointer:
     
     # Analyse des triggers d'input
     graph.add_node("interpret_input", create_trigger_analysis_node(LLMManager()))
+    graph.add_node("evolve_relation", evolve_character_relation(llm_manager=LLMManager()))
     # graph.add_node("interpret_input", interpret_player_input_node(llm_manager=LLMManager()))
     # graph.add_node("decide_intent", decide_intent_node())
     
@@ -76,8 +75,9 @@ def create_character_graph_with_memory(character_name: str, enable_checkpointer:
     # Flux avec chargement de mémoire
     graph.add_edge("load_memory", "interpret_input")
     # graph.add_edge("interpret_input", "decide_intent")
-    graph.add_edge("interpret_input", "perceive")
     graph.add_edge("perceive", "check_memory_integration")
+    graph.add_edge("interpret_input", "evolve_relation")
+    graph.add_edge("evolve_relation", "perceive")
     
     # Depuis la vérification mémoire, routage selon la complexité
     graph.add_conditional_edges(

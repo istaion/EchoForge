@@ -5,18 +5,15 @@ from typing import Dict, Any, List, Optional
 from ..state.character_state import CharacterState
 from langsmith import traceable
 from echoforge.utils.config import get_config
+from echoforge.agents.nodes.rag_search import ReactRAGAgent
+import re
 
 config = get_config()
 @traceable
 def assess_rag_need(state: CharacterState) -> CharacterState:
     """
     Évalue si une recherche RAG est nécessaire pour répondre à la requête.
-    
-    Args:
-        state: État actuel du personnage
-        
-    Returns:
-        État mis à jour avec l'évaluation RAG
+    Version avec agent ReAct.
     """
     state["processing_steps"].append("rag_assessment")
     
@@ -24,15 +21,57 @@ def assess_rag_need(state: CharacterState) -> CharacterState:
     intent = state["message_intent"]
     character_name = state["character_name"]
     
-    # Analyse par LLM du besoin RAG
-    rag_analysis = _llm_rag_analysis(message, intent, character_name)
-    
-    # Mise à jour de l'état
-    state["needs_rag_search"] = rag_analysis["needs_rag"]
-    state["rag_query"] = [rag_analysis["query"]]
-    
-    # Debug info
-    state["debug_info"]["rag_assessment"] = rag_analysis
+    # Utiliser l'agent ReAct pour gérer le processus RAG
+    try:
+        from echoforge.core import EchoForgeRAG
+        
+        # Créer le système RAG
+        config = get_config()
+        rag_system = EchoForgeRAG(
+            data_path=str(config.data_path),
+            vector_store_path=str(config.vector_store_path),
+            embedding_model=config.embedding_model,
+            llm_model=config.llm_model
+        )
+        
+        # Créer et exécuter l'agent
+        from echoforge.core.llm_providers import LLMManager
+        llm_manager = LLMManager()
+        
+        agent = ReactRAGAgent(llm_manager, rag_system)
+        result = agent.process_rag_need(
+            user_message=message,
+            character_name=character_name,
+            intent=intent,
+            conversation_history=state.get("conversation_history", [])
+        )
+        
+        # Mise à jour de l'état avec les résultats
+        state["needs_rag_search"] = result["needs_rag"]
+        state["rag_query"] = result["search_queries"] if result["search_queries"] else [message]
+        state["rag_results"] = result.get("rag_results", [])  # Les vrais résultats RAG
+        state["relevant_knowledge"] = result.get("relevant_knowledge", [])
+        
+        # Debug info
+        state["debug_info"]["rag_assessment"] = {
+            "needs_rag": result["needs_rag"],
+            "search_performed": result["search_performed"],
+            "search_queries": result["search_queries"],
+            "evaluation": result["evaluation"],
+            "reasoning": result["reasoning"],
+            "rag_results_count": len(result.get("rag_results", [])),
+            "method": "react_agent"
+        }
+        
+    except Exception as e:
+        print(f"⚠️ Erreur dans l'agent ReAct: {e}")
+        # Fallback sur l'analyse simple
+        rag_analysis = _llm_rag_analysis(message, intent, character_name)
+        state["needs_rag_search"] = rag_analysis["needs_rag"]
+        state["rag_query"] = [rag_analysis["query"]] if rag_analysis["query"] else [message]
+        state["rag_results"] = []
+        state["relevant_knowledge"] = []
+        state["debug_info"]["rag_assessment"] = rag_analysis
     
     return state
 

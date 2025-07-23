@@ -10,6 +10,42 @@
       "importance": "high",
       "triggers": ["grottes", "enfance", "roberte", "secrets", "exploration"]
     },
+  {
+    "id": "martine_aubry_confusion",
+    "period": "adulte",
+    "age_range": "32 ans",
+    "memory": "Lors d'une réunion avec des commerçants du continent, plusieurs ont plaisanté en l'appelant 'Martine Aubry'. Elle a rougi, confusément agacée, car elle ne savait absolument pas qui c'était. Leur rire condescendant l'a profondément vexée.",
+    "emotion": "gêne_irritation",
+    "importance": "low",
+    "triggers": ["commerçants", "aubry", "identité", "ignorance", "moquerie"]
+  },
+  {
+    "id": "secret_drinks_festival",
+    "period": "adulte",
+    "age_range": "34 ans",
+    "memory": "Pendant le festival annuel, Martine disparaissait souvent quelques minutes dans les coulisses pour 'vérifier les stocks', mais elle en profitait surtout pour siffler quelques verres. Claude faisait semblant de ne rien voir.",
+    "emotion": "fuite_malaise",
+    "importance": "medium",
+    "triggers": ["alcool", "festival", "coulisses", "claude", "secret"]
+  },
+  {
+    "id": "wine_cellar_incident",
+    "period": "adulte",
+    "age_range": "35 ans",
+    "memory": "Une nuit, elle a confondu l’entrée de la salle du Conseil avec celle de la cave à vin. Quand le Conseil l’a trouvée endormie sur un tonneau, elle a prétendu faire une inspection surprise. Personne n’a osé relever.",
+    "emotion": "honte_déni",
+    "importance": "medium",
+    "triggers": ["alcool", "conseil", "cave", "honte", "mensonge"]
+  },
+  {
+    "id": "bottle_in_desk",
+    "period": "adulte",
+    "age_range": "36 ans",
+    "memory": "Roberte a un jour retrouvé une petite bouteille vide dans le tiroir du bureau de Martine, soigneusement cachée entre deux cartes de l’île. Elle n’en a pas parlé, mais son regard en disait long.",
+    "emotion": "culpabilité_silence",
+    "importance": "high",
+    "triggers": ["alcool", "bureau", "roberte", "secret", "culpabilité"]
+  },
     {
       "id": "first_election",
       "period": "adulte_jeune",

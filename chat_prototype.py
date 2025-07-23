@@ -2,7 +2,7 @@ import gradio as gr
 import json
 from datetime import datetime, timezone
 import os
-from typing import List, Tuple, Dict, Optional
+from typing import List, Tuple, Dict, Optional, Any
 from pathlib import Path
 import base64
 from io import BytesIO
@@ -14,6 +14,8 @@ import uuid
 import shutil
 from langsmith import traceable
 from echoforge.utils.config import get_config
+from echoforge.db.services.session_service import db_session_service
+from echoforge.db.database import init_db
 
 config = get_config()
 
@@ -50,7 +52,7 @@ else:
 # 🆕 Chemins des fichiers
 CHARACTERS_TEMPLATE_PATH = "data/game_data/characters.json"
 PLAYER_TEMPLATE_PATH = "data/game_data/player.json"
-SESSIONS_DIR = "data/game_data/sessions"
+SESSIONS_DIR = "/tmp/sessions"
 PLAYER_SESSIONS_DIR = f"{SESSIONS_DIR}/player"
 CHARACTERS_SESSIONS_DIR = f"{SESSIONS_DIR}/characters"
 
@@ -100,103 +102,51 @@ def get_player_session_path(session_id: str) -> str:
     """Retourne le chemin du fichier de sauvegarde du joueur pour une session"""
     return f"{PLAYER_SESSIONS_DIR}/player_{session_id}.json"
 
-def load_characters_data_for_session(session_id: str) -> dict:
-    """Charge les données des personnages pour une session spécifique"""
-    session_file = get_characters_session_path(session_id)
-    
+def save_player_data_for_session(player_data: dict, session_id: str):
+    """Sauvegarde les données joueur en base de données"""
     try:
-        if os.path.exists(session_file):
-            with open(session_file, "r") as f:
-                characters_data = json.load(f)
-            print(f"💾 Données personnages chargées pour session {session_id}")
-            return characters_data
+        # Mise à jour des métadonnées
+        if "meta" not in player_data:
+            player_data["meta"] = {}
+        
+        player_data["meta"]["last_updated"] = datetime.now(timezone.utc).isoformat()
+        player_data["meta"]["save_count"] = player_data.get("meta", {}).get("save_count", 0) + 1
+        player_data["meta"]["session_id"] = session_id
+        player_data["meta"]["storage_type"] = "database"
+        
+        success = db_session_service.update_session(
+            session_id=session_id,
+            player_data=player_data
+        )
+        
+        if success:
+            print(f"💾 Données joueur sauvegardées en DB: {session_id}")
         else:
-            # Nouvelle session : copie du template
-            with open(CHARACTERS_TEMPLATE_PATH, "r") as f:
-                template_data = json.load(f)
-            
-            print(f"🆕 Nouvelles données personnages créées pour session {session_id} (depuis template)")
-            return template_data
+            print(f"❌ Échec sauvegarde joueur DB: {session_id}")
             
     except Exception as e:
-        print(f"❌ Erreur chargement personnages session {session_id}: {e}")
-        # Fallback sur template
-        with open(CHARACTERS_TEMPLATE_PATH, "r") as f:
-            return json.load(f)
-
-def save_characters_data_for_session(characters_data: dict, session_id: str):
-    """
-    Sauvegarde les données des personnages pour une session spécifique.
-    🆕 Parcourt toutes les clés du template et sauvegarde le contenu correspondant du state.
-    """
-    try:
-        session_file = get_characters_session_path(session_id)
-        
-        # Chargement du template pour s'assurer qu'on a toutes les clés
-        with open(CHARACTERS_TEMPLATE_PATH, "r") as f:
-            template_data = json.load(f)
-        
-        # 🆕 Construction des données à sauvegarder en parcourant le template
-        session_characters_data = {}
-        
-        for character_id, template_character in template_data.items():
-            if character_id in characters_data:
-                # Copie toutes les clés du template avec les valeurs du state
-                session_characters_data[character_id] = {}
-                
-                # Parcours de toutes les clés du template
-                for key, template_value in template_character.items():
-                    if key in characters_data[character_id]:
-                        session_characters_data[character_id][key] = characters_data[character_id][key]
-                    else:
-                        # Si la clé n'existe pas dans le state, garde la valeur du template
-                        session_characters_data[character_id][key] = template_value
-                        
-                print(f"💾 Personnage {character_id} sauvegardé ({len(session_characters_data[character_id])} clés)")
-            else:
-                # Si le personnage n'existe pas dans le state, garde le template
-                session_characters_data[character_id] = template_character
-                print(f"💾 Personnage {character_id} sauvegardé (depuis template)")
-        
-        # Ajout des métadonnées de session
-        for character_id in session_characters_data:
-            if "meta" not in session_characters_data[character_id]:
-                session_characters_data[character_id]["meta"] = {}
-            
-            session_characters_data[character_id]["meta"]["last_updated"] = datetime.now(timezone.utc).isoformat()
-            session_characters_data[character_id]["meta"]["session_id"] = session_id
-        
-        # Sauvegarde
-        with open(session_file, "w") as f:
-            json.dump(session_characters_data, f, indent=2, ensure_ascii=False)
-        
-        print(f"💾 Données personnages sauvegardées pour session {session_id} ({len(session_characters_data)} personnages)")
-        
-    except Exception as e:
-        print(f"❌ Erreur sauvegarde personnages session {session_id}: {e}")
+        print(f"❌ Erreur sauvegarde joueur session {session_id}: {e}")
 
 def load_player_data_for_session(session_id: str) -> dict:
-    """Charge les données joueur pour une session spécifique"""
-    session_file = get_player_session_path(session_id)
-    
+    """Charge les données joueur depuis la base de données"""
     try:
-        if os.path.exists(session_file):
-            with open(session_file, "r") as f:
-                player_data = json.load(f)
-            print(f"💾 Données joueur chargées pour session {session_id}")
-            return player_data
+        session_data = db_session_service.load_session(session_id)
+        
+        if session_data and session_data["player_data"]:
+            print(f"💾 Données joueur chargées depuis DB: {session_id}")
+            return session_data["player_data"]
         else:
             # Nouvelle session : copie du template
             with open(PLAYER_TEMPLATE_PATH, "r") as f:
                 template_data = json.load(f)
             
-            # Mise à jour des métadonnées pour la nouvelle session
             template_data["meta"]["created"] = datetime.now(timezone.utc).isoformat()
             template_data["meta"]["last_updated"] = datetime.now(timezone.utc).isoformat()
             template_data["meta"]["save_count"] = 0
             template_data["meta"]["session_id"] = session_id
+            template_data["meta"]["storage_type"] = "database"
             
-            print(f"🆕 Nouvelles données joueur créées pour session {session_id}")
+            print(f"🆕 Nouvelles données joueur créées depuis template: {session_id}")
             return template_data
             
     except Exception as e:
@@ -205,24 +155,51 @@ def load_player_data_for_session(session_id: str) -> dict:
         with open(PLAYER_TEMPLATE_PATH, "r") as f:
             return json.load(f)
 
-def save_player_data_for_session(player_data: dict, session_id: str):
-    """Sauvegarde les données joueur pour une session spécifique"""
+def save_characters_data_for_session(characters_data: dict, session_id: str):
+    """Sauvegarde les données personnages en base de données"""
     try:
-        session_file = get_player_session_path(session_id)
+        # Mise à jour des métadonnées pour chaque personnage
+        for character_id in characters_data:
+            if "meta" not in characters_data[character_id]:
+                characters_data[character_id]["meta"] = {}
+            
+            characters_data[character_id]["meta"]["last_updated"] = datetime.now(timezone.utc).isoformat()
+            characters_data[character_id]["meta"]["session_id"] = session_id
+            characters_data[character_id]["meta"]["storage_type"] = "database"
         
-        # Mise à jour des métadonnées
-        if "meta" not in player_data:
-            player_data["meta"] = {}
+        success = db_session_service.update_session(
+            session_id=session_id,
+            characters_data=characters_data
+        )
         
-        player_data["meta"]["last_updated"] = datetime.now(timezone.utc).isoformat()
-        player_data["meta"]["save_count"] = player_data.get("meta", {}).get("save_count", 0) + 1
-        player_data["meta"]["session_id"] = session_id
-        
-        with open(session_file, "w") as f:
-            json.dump(player_data, f, indent=2, ensure_ascii=False)
-        print(f"💾 Données joueur sauvegardées pour session {session_id}")
+        if success:
+            print(f"💾 Données personnages sauvegardées en DB: {session_id} ({len(characters_data)} personnages)")
+        else:
+            print(f"❌ Échec sauvegarde personnages DB: {session_id}")
+            
     except Exception as e:
-        print(f"❌ Erreur sauvegarde joueur session {session_id}: {e}")
+        print(f"❌ Erreur sauvegarde personnages session {session_id}: {e}")
+
+def load_characters_data_for_session(session_id: str) -> dict:
+    """Charge les données personnages depuis la base de données"""
+    try:
+        session_data = db_session_service.load_session(session_id)
+        
+        if session_data and session_data["characters_data"]:
+            print(f"💾 Données personnages chargées depuis DB: {session_id}")
+            return session_data["characters_data"]
+        else:
+            # Nouvelle session : copie du template
+            with open(CHARACTERS_TEMPLATE_PATH, "r") as f:
+                template_data = json.load(f)
+            
+            print(f"🆕 Nouvelles données personnages créées depuis template: {session_id}")
+            return template_data
+            
+    except Exception as e:
+        print(f"❌ Erreur chargement personnages session {session_id}: {e}")
+        with open(CHARACTERS_TEMPLATE_PATH, "r") as f:
+            return json.load(f)
 
 # 🆕 Fonction de sauvegarde complète de la session
 def save_complete_session(session_id: str):
@@ -261,6 +238,14 @@ game_state = {
     "current_session_id": None,
     "session_name": None,
     "player_position": BALLOON_POSITION.copy(),
+    "reputation_state": {
+    "martine": 0,
+    "claude": 0,
+    "azzedine": 0,
+    "roberte": 0,
+    },
+    "island_treasure_visible": False,
+    "treasure_position": {"x": 390, "y": 880},
     "chat_open": False,
     "chat_locked": False,
     "conversation_ending": False,
@@ -275,6 +260,7 @@ game_state = {
 def sync_game_state_with_player_data():
     """Synchronise game_state avec CURRENT_PLAYER_DATA"""
     if CURRENT_PLAYER_DATA:
+        print(f"🔄 Synchronisation game_state avec player_data")
         game_state.update({
             "player_gold": CURRENT_PLAYER_DATA["player_stats"]["gold"],
             "player_cookies": CURRENT_PLAYER_DATA["player_stats"]["cookies"], 
@@ -282,6 +268,9 @@ def sync_game_state_with_player_data():
             "player_alcool": CURRENT_PLAYER_DATA["player_stats"]["alcool"],  
             "montgolfiere_repaired": CURRENT_PLAYER_DATA["montgolfiere_status"]["fully_operational"]
         })
+        print(f"✅ Game state synchronisé: or={game_state['player_gold']}, cookies={game_state['player_cookies']}")
+    else:
+        print("⚠️ CURRENT_PLAYER_DATA est None - impossible de synchroniser")
 
 # Instances globales
 graph_manager = None
@@ -289,113 +278,79 @@ rag_system = None
 
 # 🆕 Gestion des sessions
 class SessionManager:
-    """Gestionnaire des sessions de jeu."""
-    
-    @staticmethod
-    def generate_session_id() -> str:
-        """Génère un nouvel ID de session."""
-        return f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:8]}"
-    
-    @staticmethod
-    def generate_session_name() -> str:
-        """Génère un nom de session par défaut."""
-        return f"Partie du {datetime.now().strftime('%d/%m/%Y à %H:%M')}"
+    """Gestionnaire des sessions avec base de données."""
     
     @staticmethod
     def get_available_sessions() -> List[Dict[str, str]]:
-        """Récupère la liste des sessions disponibles."""
-        sessions = []
-        
-        # 🆕 Sessions à partir des fichiers de sauvegarde joueur ET personnages
-        player_files = []
-        character_files = []
-        
-        if os.path.exists(PLAYER_SESSIONS_DIR):
-            player_files = [f for f in os.listdir(PLAYER_SESSIONS_DIR) if f.startswith("player_session_") and f.endswith(".json")]
-        
-        if os.path.exists(CHARACTERS_SESSIONS_DIR):
-            character_files = [f for f in os.listdir(CHARACTERS_SESSIONS_DIR) if f.startswith("characters_session_") and f.endswith(".json")]
-        
-        # Union des sessions depuis les deux sources
-        all_session_files = set()
-        for f in player_files:
-            session_id = f.replace("player_", "").replace(".json", "")
-            all_session_files.add(session_id)
-        
-        for f in character_files:
-            session_id = f.replace("characters_", "").replace(".json", "")
-            all_session_files.add(session_id)
-        
-        for session_id in all_session_files:
-            display_name = session_id.replace("session_", "").replace("_", " ")
+        """Récupère la liste des sessions depuis la base de données."""
+        try:
+            sessions = db_session_service.list_sessions()
+            print(f"🔍 Sessions trouvées en DB: {len(sessions)}")
+            return sessions
+        except Exception as e:
+            print(f"❌ Erreur récupération sessions DB: {e}")
+            return []
+    
+    @staticmethod
+    def create_new_session(session_name: str = None) -> str:
+        """Crée une nouvelle session en base de données."""
+        try:
+            # Génération de l'ID de session
+            session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:8]}"
             
-            # 🆕 Essaie de récupérer plus d'infos depuis les fichiers
-            try:
-                player_file = get_player_session_path(session_id)
-                characters_file = get_characters_session_path(session_id)
-                
-                # Informations sur la session
-                info_parts = []
-                if os.path.exists(player_file):
-                    with open(player_file, "r") as f:
-                        player_data = json.load(f)
-                    last_updated = player_data.get("meta", {}).get("last_updated", "")
-                    if last_updated:
-                        info_parts.append(last_updated[:16])  # YYYY-MM-DD HH:MM
-                
-                if os.path.exists(characters_file):
-                    info_parts.append("Personnages")
-                
-                if info_parts:
-                    display_name += f" - {' | '.join(info_parts)}"
-                
-            except:
-                pass
+            if not session_name:
+                session_name = f"Partie du {datetime.now().strftime('%d/%m/%Y à %H:%M')}"
             
-            sessions.append({
-                "session_id": session_id,
-                "display_name": display_name,
-                "has_player": os.path.exists(get_player_session_path(session_id)),
-                "has_characters": os.path.exists(get_characters_session_path(session_id))
-            })
-        
-        # Sessions à partir de la base de données (si agents disponibles)
-        if AGENTS_AVAILABLE and graph_manager and hasattr(graph_manager, 'graph_manager'):
-            try:
-                for character_name in CHARACTERS_TEMPLATE.keys():
-                    checkpointer = PostgreSQLCheckpointSaver(character_name)
-                    db_session_ids = checkpointer.list_session_ids()
-                    
-                    for session_id in db_session_ids:
-                        # Vérifie si on a déjà cette session depuis les fichiers
-                        if not any(s["session_id"] == session_id for s in sessions):
-                            sessions.append({
-                                "session_id": session_id,
-                                "display_name": session_id.replace("session_", "").replace("_", " ") + " (DB)",
-                                "has_player": False,
-                                "has_characters": False
-                            })
+            # Charge les templates
+            with open(PLAYER_TEMPLATE_PATH, "r") as f:
+                player_template = json.load(f)
+            
+            with open(CHARACTERS_TEMPLATE_PATH, "r") as f:
+                characters_template = json.load(f)
+            
+            # Mise à jour des métadonnées du joueur
+            player_template["meta"]["created"] = datetime.now(timezone.utc).isoformat()
+            player_template["meta"]["session_id"] = session_id
+            player_template["meta"]["storage_type"] = "database"
+            
+            # Création en base
+            success = db_session_service.create_session(
+                session_id=session_id,
+                session_name=session_name,
+                player_data=player_template,
+                characters_data=characters_template
+            )
+            
+            if success:
+                print(f"✅ Nouvelle session créée en DB: {session_id}")
+                return session_id
+            else:
+                raise Exception("Impossible de créer la session en base")
                 
-            except Exception as e:
-                print(f"⚠️ Erreur récupération sessions DB: {e}")
-        
-        # Trie par session_id (plus récent en premier)
-        sessions.sort(key=lambda x: x["session_id"], reverse=True)
-        
-        return sessions
+        except Exception as e:
+            print(f"❌ Erreur création session: {e}")
+            # Fallback : génère un ID temporaire
+            return f"temp_session_{int(time.time())}"
     
     @staticmethod
     def load_session(session_id: str) -> bool:
-        """Charge une session existante."""
+        """Charge une session depuis la base de données."""
         try:
+            session_data = db_session_service.load_session(session_id)
+            
+            if not session_data:
+                print(f"⚠️ Session {session_id} non trouvée en DB")
+                return False
+            
             global CURRENT_PLAYER_DATA, CHARACTERS
             
-            # 🆕 Charge les données joueur ET personnages pour cette session
-            CURRENT_PLAYER_DATA = load_player_data_for_session(session_id)
-            CHARACTERS = load_characters_data_for_session(session_id)
+            # Chargement des données
+            CURRENT_PLAYER_DATA = session_data["player_data"]
+            CHARACTERS = session_data["characters_data"]
             
+            # Mise à jour du game_state
             game_state["current_session_id"] = session_id
-            game_state["session_name"] = session_id.replace("session_", "").replace("_", " ")
+            game_state["session_name"] = session_data["session_name"]
             game_state["session_initialized"] = True
             
             # Reset de l'état de jeu pour la nouvelle session
@@ -410,7 +365,7 @@ class SessionManager:
             # Synchronisation avec les données joueur
             sync_game_state_with_player_data()
             
-            print(f"✅ Session chargée: {session_id} (joueur + {len(CHARACTERS)} personnages)")
+            print(f"✅ Session chargée depuis DB: {session_id}")
             return True
             
         except Exception as e:
@@ -418,40 +373,32 @@ class SessionManager:
             return False
     
     @staticmethod
-    def create_new_session(session_name: str = None) -> str:
-        """Crée une nouvelle session."""
-        global CURRENT_PLAYER_DATA, CHARACTERS
-        
-        session_id = SessionManager.generate_session_id()
-        
-        if not session_name:
-            session_name = SessionManager.generate_session_name()
-        
-        # 🆕 Charge les données template pour la nouvelle session
-        CURRENT_PLAYER_DATA = load_player_data_for_session(session_id)
-        CHARACTERS = load_characters_data_for_session(session_id)
-        
-        game_state["current_session_id"] = session_id
-        game_state["session_name"] = session_name
-        game_state["session_initialized"] = True
-        
-        # Reset complet du jeu
-        game_state["current_character"] = None
-        game_state["chat_open"] = False
-        game_state["chat_locked"] = False
-        game_state["conversation_ending"] = False
-        game_state["game_events"] = []
-        game_state["memory_stats"] = {}
-        game_state["start_time"] = time.time()
-        
-        # Synchronisation avec les nouvelles données joueur
-        sync_game_state_with_player_data()
-        
-        # 🆕 Sauvegarde initiale complète
-        save_complete_session(session_id)
-        
-        print(f"✅ Nouvelle session créée: {session_id} ({session_name}) - joueur + {len(CHARACTERS)} personnages")
-        return session_id
+    def delete_session(session_id: str) -> bool:
+        """Supprime une session."""
+        try:
+            return db_session_service.delete_session(session_id)
+        except Exception as e:
+            print(f"❌ Erreur suppression session: {e}")
+            return False
+    
+    @staticmethod
+    def get_session_stats(session_id: str) -> Dict[str, Any]:
+        """Récupère les statistiques d'une session."""
+        try:
+            session_data = db_session_service.load_session(session_id)
+            if session_data:
+                return {
+                    "session_id": session_id,
+                    "session_name": session_data["session_name"],
+                    "created_at": session_data["created_at"],
+                    "last_played_at": session_data["last_played_at"],
+                    "is_completed": session_data["is_completed"],
+                    "total_playtime_seconds": session_data["total_playtime_seconds"]
+                }
+            return {}
+        except Exception as e:
+            print(f"❌ Erreur stats session: {e}")
+            return {}
 
 
 class EchoForgeAgentWrapper:
@@ -634,11 +581,11 @@ class EchoForgeAgentWrapper:
                     elif trigger_name == "give_alcool":
                         if character_key == "claude":
                             await self._give_alcool(value if isinstance(value, (int, float)) and value > 0 else 2)
-                    elif character_key == "martine":  # 🆕 Gestion pour Martine
-                        await self._give_alcool(value if isinstance(value, (int, float)) and value > 0 else 1)
-                        # 🆕 Martine devient saoule
-                        CHARACTERS[character_key]["personality"]['current_alcohol_level'] = "drunk"
-                        print(f"🍷 Martine a bu et est maintenant saoule!")
+                        elif character_key == "martine":  # 🆕 Gestion pour Martine
+                            await self._give_alcool(-value if isinstance(value, (int, float)) and value > 0 else -1)
+                            # 🆕 Martine devient saoule
+                            CHARACTERS[character_key]["personality"]['current_alcohol_level'] = "drunk"
+                            print(f"🍷 Martine a bu et est maintenant saoule!")
                     
                     # === 🆕 Triggers de quêtes ===
                     elif trigger_name.startswith("quest_"):
@@ -729,6 +676,7 @@ class EchoForgeAgentWrapper:
                 treasure_quest["completion_conditions"]["treasure_location_discovered"] = True
                 treasure_quest["progress"] = 1
                 quest_discovered = True
+                game_state["island_treasure_visible"] = True
                 print("🗺️ Emplacement du trésor révélé!")
         
         if quest_discovered:
@@ -902,6 +850,11 @@ def generate_interactive_map(active_character: str = None) -> Image.Image:
         avatar = create_character_avatar(char_data["emoji"], 50, is_active)
         map_img.paste(avatar, (pos["x"]-25, pos["y"]-25), avatar)
     
+    if game_state.get("island_treasure_visible", False):
+        treasure_avatar = create_character_avatar("💰", 50)
+        pos = game_state["treasure_position"]
+        map_img.paste(treasure_avatar, (pos["x"] - 25, pos["y"] - 25), treasure_avatar)
+    
     # Ajouter l'avatar du joueur avec la montgolfière
     balloon_emoji = "🎈" if not game_state.get("montgolfiere_repaired", False) else "✨"
     player_avatar = create_character_avatar(balloon_emoji, 60)
@@ -913,15 +866,30 @@ def generate_interactive_map(active_character: str = None) -> Image.Image:
 
 # 🆕 Fonctions de gestion des sessions pour l'interface
 def get_session_list() -> List[str]:
-    """Récupère la liste des sessions pour le dropdown."""
-    sessions = SessionManager.get_available_sessions()
-    session_choices = [f"{s['session_id']} - {s['display_name']}" for s in sessions]
-    
-    # Ajoute l'option par défaut si la liste est vide
-    if not session_choices:
-        session_choices = ["Aucune session disponible"]
-    
-    return session_choices
+    """Récupère la liste des sessions pour le dropdown avec debug."""
+    try:
+        print("🔍 Debug: Récupération de la liste des sessions depuis DB...")
+        
+        sessions = SessionManager.get_available_sessions()
+        
+        print(f"📊 {len(sessions)} sessions trouvées en DB:")
+        for i, session in enumerate(sessions[:5]):  # Affiche les 5 premières
+            print(f"   {i+1}. {session['session_id']} - {session['display_name']}")
+            print(f"      Player: {session['has_player']}, Characters: {session['has_characters']}")
+        
+        session_choices = [f"{s['session_id']} - {s['display_name']}" for s in sessions]
+        
+        if not session_choices:
+            session_choices = ["Aucune session disponible"]
+            print("⚠️ Aucune session trouvée en DB!")
+        
+        print(f"📝 Choices finales: {len(session_choices)} éléments")
+        
+        return session_choices
+        
+    except Exception as e:
+        print(f"❌ Erreur récupération liste sessions: {e}")
+        return ["Erreur de connexion à la base"]
 
 
 def handle_session_selection(session_choice: str) -> Tuple[str, gr.update, str, Image.Image, gr.update, str, str]:
@@ -971,38 +939,76 @@ def handle_session_selection(session_choice: str) -> Tuple[str, gr.update, str, 
         )
 
 
-def handle_new_session(session_name: str = None) -> Tuple[str, gr.update, str, Image.Image, gr.update, str, str]:
+def handle_new_session(session_name: str = None) -> Tuple[str, gr.update, str, Image.Image, gr.update, str, str, bool]:
     """
-    Crée une nouvelle session.
+    Crée une nouvelle session et met à jour l'interface.
     
     Returns:
-        message, session_selection_update, session_info, map_image, game_interface_update, game_status, memory_info
+        message, session_selection_update, session_info, map_image, game_interface_update, game_status, memory_info, show_intro_screen
     """
-    if not session_name or session_name.strip() == "":
-        session_name = None  # Utilisera le nom par défaut
-    
-    session_id = SessionManager.create_new_session(session_name)
-    
-    message = f"✅ Nouvelle session créée: {session_id}"
-    session_info = f"**Session active:** {game_state['session_name']}\n**ID:** {game_state['current_session_id']}"
-    
-    return (
-        message,
-        gr.update(visible=False),
-        session_info,
-        generate_interactive_map(),
-        gr.update(visible=False), 
-        get_game_status(),
-        get_memory_debug_info(),
-        True  # show_intro_screen: actif
-    )
+    try:
+        if not session_name or session_name.strip() == "":
+            session_name = None  # Utilisera le nom par défaut
+        
+        # 🆕 Création de la session
+        session_id = SessionManager.create_new_session(session_name)
+        
+        # 🆕 IMPORTANT: Charger immédiatement la session créée
+        success = SessionManager.load_session(session_id)
+        
+        if not success:
+            return (
+                "❌ Erreur lors du chargement de la session créée.",
+                gr.update(visible=True),    # session_selection_container visible
+                "",
+                generate_interactive_map(),
+                gr.update(visible=False),   # game_interface_container caché
+                "",
+                "",
+                False
+            )
+        
+        # Message de succès
+        message = f"✅ Nouvelle session créée et chargée: {session_id}"
+        session_info = f"**Session active:** {game_state['session_name']}\n**ID:** {game_state['current_session_id']}\n**Stockage:** Base de données"
+        
+        return (
+            message,
+            gr.update(visible=False),   # Cache la sélection de session
+            session_info,
+            generate_interactive_map(),
+            gr.update(visible=True),    # 🆕 Montre l'interface de jeu IMMÉDIATEMENT
+            get_game_status(),
+            get_memory_debug_info(),
+            True  # show_intro_screen: actif
+        )
+        
+    except Exception as e:
+        print(f"❌ Erreur création nouvelle session: {e}")
+        return (
+            f"❌ Erreur lors de la création de la session: {str(e)}",
+            gr.update(visible=True),    # session_selection_container visible
+            "",
+            generate_interactive_map(),
+            gr.update(visible=False),   # game_interface_container caché
+            "",
+            "",
+            False
+        )
 
 
 def handle_map_click(evt: gr.SelectData) -> Tuple[str, bool, str, Image.Image, bool]:
     """Gère les clics sur la carte."""
-    # Vérification de session
+    
+    # 🆕 Vérification de session avec debug
+    print(f"🔍 Debug map_click: session_initialized = {game_state.get('session_initialized', False)}")
+    print(f"🔍 Debug map_click: current_session_id = {game_state.get('current_session_id', 'None')}")
+    print(f"🔍 Debug map_click: CURRENT_PLAYER_DATA exists = {CURRENT_PLAYER_DATA is not None}")
+    
     if not game_state.get("session_initialized", False):
-        return "❌ Aucune session active. Veuillez d'abord sélectionner ou créer une session.", False, "", generate_interactive_map(), True
+        error_msg = "❌ Aucune session active. Veuillez d'abord sélectionner ou créer une session."
+        print(f"⚠️ {error_msg}")
+        return error_msg, False, "", generate_interactive_map(), True
     
     if not evt.index:
         return "Cliquez sur un personnage pour lui parler!", False, "", generate_interactive_map(), True
@@ -1034,6 +1040,7 @@ def handle_map_click(evt: gr.SelectData) -> Tuple[str, bool, str, Image.Image, b
         # Générer la carte avec le personnage actif mis en évidence
         updated_map = generate_interactive_map(clicked_character)
         
+        print(f"✅ Personnage sélectionné: {clicked_character}")
         return welcome_message, True, clicked_character, updated_map, False
     else:
         return "Cliquez sur un personnage pour lui parler!", False, "", generate_interactive_map(), True
@@ -1085,6 +1092,16 @@ def close_chat() -> Tuple[bool, List, str, Image.Image, bool, bool]:
     # Sauvegarde lors de la fermeture manuelle
     if game_state.get("current_session_id"):
         save_player_data_for_session(CURRENT_PLAYER_DATA, game_state["current_session_id"])
+    if "roberte" in CHARACTERS:
+        current_pos = CHARACTERS["roberte"]["position"]
+        if current_pos["y"] == 480:
+            CHARACTERS["roberte"]["position"]["y"] = 420  # En cuisine
+            CHARACTERS["roberte"]["personality"]["in_kitchen"] = True
+            print("👩‍🍳 Roberte retourne en cuisine (y=420)")
+        else:
+            CHARACTERS["roberte"]["position"]["y"] = 480  # Sort de la cuisine
+            CHARACTERS["roberte"]["personality"]["in_kitchen"] = False
+            print("👩‍🍳 Roberte sort de la cuisine (y=480)")
     return False, [], "", generate_interactive_map(), True, False
 
 
@@ -1099,6 +1116,10 @@ def get_game_status() -> str:
     # Calcul du temps de jeu
     play_time = int(time.time() - game_state["start_time"])
     play_time_str = f"{play_time // 60}m {play_time % 60}s"
+
+    reputation = game_state.get("reputation_state", {})
+    reputation_str = "\n".join([f"- {k.title()}: {v}" for k, v in reputation.items()])
+
     
     # Système de dialogue actif
     dialogue_system = "🤖 Agents + Mémoire" if AGENTS_AVAILABLE else ("📚 RAG Basique" if RAG_AVAILABLE else "❌ Aucun")
@@ -1133,6 +1154,8 @@ def get_game_status() -> str:
 **Système:** {dialogue_system}{session_info}{memory_info}
 
 **Objectif:** Réparer votre montgolfière pour quitter l'île !
+**Relations avec les personnages:**
+{reputation_str}
 """
     return status
 
@@ -1529,7 +1552,7 @@ def create_interface():
                         
                         # Message de fin de conversation
                         end_conversation_msg = gr.Markdown(
-                            "**💬 Conversation terminée. Fermeture automatique dans 2 secondes...**",
+                            "**💬 Conversation terminée.**",
                             visible=False
                         )
                 
@@ -1921,4 +1944,7 @@ def main():
 
 
 if __name__ == "__main__":
+    os.makedirs(SESSIONS_DIR, exist_ok=True)
+    os.makedirs(PLAYER_SESSIONS_DIR, exist_ok=True)
+    os.makedirs(CHARACTERS_SESSIONS_DIR, exist_ok=True)
     main()

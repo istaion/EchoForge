@@ -37,7 +37,7 @@
       "type": "residential",
       "description": "Zone résidentielle dominée par l'imposante cuisine de Roberte. Les arômes de ses créations parfument tout le quartier. Un potager luxuriant entoure sa demeure.",
       "notable_features": ["Cuisine aux cinq fourneaux", "Potager aux légumes rares", "Cellier aux épices"],
-      "specialties": ["Herbes aromatiques uniques", "Fruits de mer locaux", "Miel de fleurs de cristal"]
+      "specialties": ["Herbes aromatiques uniques", "Fruits de mer locaux", "Miel de fleurs de cristal", "auberge", "hotel", "restaurant"]
     },
     {
       "id": "crystal_caves",

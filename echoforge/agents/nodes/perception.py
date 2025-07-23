@@ -35,7 +35,7 @@ def interpret_triggers_input_node(llm_manager: LLMManager):
 
         # Crée les tools
         tools = [
-            make_get_player_state_tool(player_data),
+            make_get_player_state_tool(player_data["player_stats"]),
             make_get_character_state_tool(character_data),
         ]
         
@@ -73,7 +73,9 @@ FORMAT DE RÉPONSE OBLIGATOIRE:
     "input_trigger_probs": {{"bye": 0.0, "ask_for_money": 0.0, "give_alcool": 0.0, "ask_for_treasure": 0.0}},
     "activated_input_triggers": ["trigger_name"],
     "refused_input_triggers": [{{"trigger": "trigger_name", "reason_refused": "raison"}}]
-}}"""
+}}
+
+Exemple de reason_refused : Le joueur veux donner de l'alcool mais n'a pas d'alcool dans son inventaire."""
 
         try:
             # Invoque le LLM avec tools
@@ -451,3 +453,327 @@ def extract_json_block(text: str) -> str:
     except Exception as e:
         print(f"⚠️ Erreur lors de l'extraction JSON: {e}")
         return ""
+    
+@traceable
+def evolve_character_relation(llm_manager: LLMManager):
+    """
+    Nœud qui évalue et fait évoluer la relation entre le personnage et le joueur
+    basé sur les relation_triggers et le message du joueur.
+    
+    Args:
+        llm_manager: Gestionnaire LLM pour l'évaluation
+        
+    Returns:
+        Fonction node pour LangGraph
+    """
+    
+    def relation_evolution_node(state: CharacterState) -> CharacterState:
+        """
+        Évalue le message du joueur et ajuste la relation en conséquence.
+        
+        La relation évolue entre -2 et +2 par interaction, avec un minimum de -10 et maximum de +10.
+        """
+        state["processing_steps"].append("relation_evolution")
+        
+        # Récupération des données nécessaires
+        user_message = state["user_message"]
+        character_name = state["character_name"]
+        character_data = state["character_data"]
+        player_data = state["player_data"]
+        
+        # Récupération des triggers de relation
+        relation_triggers = character_data.get("relation_triggers", {})
+        love_triggers = relation_triggers.get("love", [])
+        hate_triggers = relation_triggers.get("hate", [])
+        
+        # Relation actuelle
+        current_relation = character_data.get("relation", 0)
+        
+        if not love_triggers and not hate_triggers:
+            # Pas de triggers définis, pas d'évolution
+            return state
+        
+        try:
+            # Évaluation par LLM
+            relation_change = _evaluate_relation_change(
+                user_message=user_message,
+                love_triggers=love_triggers,
+                hate_triggers=hate_triggers,
+                character_name=character_name,
+                current_relation=current_relation,
+                llm_manager=llm_manager
+            )
+            
+            # Application du changement
+            new_relation = _apply_relation_change(
+                current_relation=current_relation,
+                change=relation_change["change"],
+                min_value=-10,
+                max_value=10
+            )
+            
+            # Mise à jour du state
+            state["character_data"]["relation"] = new_relation
+            
+            # Mise à jour de la réputation du joueur
+            if "game_state" in player_data and "reputation" in player_data["game_state"]:
+                character_key = character_name.lower()
+                if character_key in player_data["game_state"]["reputation"]:
+                    player_data["game_state"]["reputation"][character_key] = new_relation
+            
+            # Debug info
+            state["debug_info"]["relation_evolution"] = {
+                "previous_relation": current_relation,
+                "new_relation": new_relation,
+                "change": relation_change["change"],
+                "reasoning": relation_change["reasoning"],
+                "love_triggers_detected": relation_change.get("love_triggers_detected", []),
+                "hate_triggers_detected": relation_change.get("hate_triggers_detected", [])
+            }
+            
+            # Ajout d'un événement si changement significatif
+            if abs(relation_change["change"]) >= 1:
+                _add_relation_event(state, current_relation, new_relation, relation_change)
+            
+        except Exception as e:
+            print(f"⚠️ Erreur lors de l'évolution de la relation: {e}")
+            state["debug_info"]["relation_evolution"] = {
+                "error": str(e),
+                "relation_unchanged": True
+            }
+        
+        return state
+    
+    return relation_evolution_node
+
+@traceable
+def _evaluate_relation_change(
+    user_message: str,
+    love_triggers: list,
+    hate_triggers: list,
+    character_name: str,
+    current_relation: int,
+    llm_manager: LLMManager
+) -> Dict[str, Any]:
+    """
+    Évalue le changement de relation basé sur le message et les triggers.
+    
+    Returns:
+        Dict avec 'change' (-2 à +2), 'reasoning', et les triggers détectés
+    """
+    
+    # Construction du prompt d'évaluation
+    evaluation_prompt = f"""Tu es un analyseur de sentiment expert pour le personnage {character_name}.
+
+RELATION ACTUELLE: {current_relation}/10
+
+MESSAGE DU JOUEUR: "{user_message}"
+
+CHOSES QUE {character_name.upper()} AIME (augmentent la relation):
+{chr(10).join(f"- {trigger}" for trigger in love_triggers) if love_triggers else "- Aucun trigger défini"}
+
+CHOSES QUE {character_name.upper()} DÉTESTE (diminuent la relation):
+{chr(10).join(f"- {trigger}" for trigger in hate_triggers) if hate_triggers else "- Aucun trigger défini"}
+
+INSTRUCTIONS:
+1. Analyse le message pour détecter la présence des éléments aimés ou détestés
+2. Évalue l'intensité de ces éléments dans le message
+3. Détermine un changement de relation entre -2 et +2:
+   - +2: Le message contient fortement des éléments aimés (ex: proposition très polie d'alcool)
+   - +1: Le message contient modérément des éléments aimés
+   - 0: Message neutre ou équilibré
+   - -1: Le message contient modérément des éléments détestés
+   - -2: Le message contient fortement des éléments détestés (ex: vulgarité excessive)
+
+4. La relation actuelle influence légèrement l'interprétation:
+   - Si relation positive (>5): le personnage est plus indulgent
+   - Si relation négative (<-5): le personnage est plus critique
+
+RÉPONDS UNIQUEMENT avec ce format JSON:
+{{
+    "change": <valeur entre -2 et 2>,
+    "reasoning": "Explication courte de la décision",
+    "love_triggers_detected": ["trigger1", "trigger2"],
+    "hate_triggers_detected": ["trigger3"],
+    "intensity": "faible|modérée|forte"
+}}
+
+EXEMPLES:
+Message: "Hé beauté, tu veux un verre de whisky ?"
+Si "alcool" est aimé et "vulgarité" est détesté:
+{{"change": 0, "reasoning": "Proposition d'alcool (+1) mais ton familier (-1)", "love_triggers_detected": ["alcool"], "hate_triggers_detected": ["vulgarité"], "intensity": "modérée"}}
+
+Message: "Permettez-moi de vous offrir ce excellent cognac, Madame la Maire"
+Si "alcool" et "politesse" sont aimés:
+{{"change": 2, "reasoning": "Proposition très polie d'alcool, deux triggers positifs", "love_triggers_detected": ["alcool", "politesse"], "hate_triggers_detected": [], "intensity": "forte"}}
+"""
+
+    try:
+        # Appel au LLM
+        llm_response = llm_manager.invoke(evaluation_prompt)
+        
+        # Extraction du JSON
+        json_str = _extract_json_from_response(llm_response)
+        if json_str:
+            result = json.loads(json_str)
+            
+            # Validation du résultat
+            change = result.get("change", 0)
+            change = max(-2, min(2, change))  # Clamp entre -2 et 2
+            
+            return {
+                "change": change,
+                "reasoning": result.get("reasoning", "Évaluation LLM"),
+                "love_triggers_detected": result.get("love_triggers_detected", []),
+                "hate_triggers_detected": result.get("hate_triggers_detected", []),
+                "intensity": result.get("intensity", "modérée")
+            }
+        else:
+            # Fallback sur analyse par mots-clés
+            return _fallback_keyword_evaluation(
+                user_message, love_triggers, hate_triggers
+            )
+            
+    except Exception as e:
+        print(f"⚠️ Erreur évaluation LLM relation: {e}")
+        return _fallback_keyword_evaluation(
+            user_message, love_triggers, hate_triggers
+        )
+
+
+def _fallback_keyword_evaluation(
+    message: str, 
+    love_triggers: list, 
+    hate_triggers: list
+) -> Dict[str, Any]:
+    """
+    Évaluation de fallback basée sur la détection simple de mots-clés.
+    """
+    message_lower = message.lower()
+    
+    # Détection des triggers
+    love_detected = []
+    hate_detected = []
+    
+    for trigger in love_triggers:
+        if trigger.lower() in message_lower:
+            love_detected.append(trigger)
+    
+    for trigger in hate_triggers:
+        if trigger.lower() in message_lower:
+            hate_detected.append(trigger)
+    
+    # Calcul du changement
+    love_score = len(love_detected)
+    hate_score = len(hate_detected)
+    
+    # Détection de l'intensité (mots amplificateurs)
+    intensity_words = ["très", "vraiment", "extrêmement", "super", "trop", "grave"]
+    has_intensity = any(word in message_lower for word in intensity_words)
+    
+    # Calcul du changement net
+    net_score = love_score - hate_score
+    
+    if net_score > 0:
+        change = 2 if (net_score >= 2 or has_intensity) else 1
+    elif net_score < 0:
+        change = -2 if (net_score <= -2 or has_intensity) else -1
+    else:
+        change = 0
+    
+    return {
+        "change": change,
+        "reasoning": f"Détection par mots-clés: {love_score} positifs, {hate_score} négatifs",
+        "love_triggers_detected": love_detected,
+        "hate_triggers_detected": hate_detected,
+        "intensity": "forte" if has_intensity else "modérée"
+    }
+
+
+def _apply_relation_change(
+    current_relation: int,
+    change: int,
+    min_value: int = -10,
+    max_value: int = 10
+) -> int:
+    """
+    Applique le changement de relation en respectant les limites.
+    """
+    new_relation = current_relation + change
+    return max(min_value, min(max_value, new_relation))
+
+
+def _add_relation_event(
+    state: CharacterState,
+    old_relation: int,
+    new_relation: int,
+    change_info: Dict[str, Any]
+):
+    """
+    Ajoute un événement de changement de relation significatif.
+    """
+    if "game_events" not in state:
+        state["game_events"] = []
+    
+    event = {
+        "timestamp": time.time(),
+        "type": "relation_change",
+        "character": state["character_name"],
+        "old_value": old_relation,
+        "new_value": new_relation,
+        "change": change_info["change"],
+        "reasoning": change_info["reasoning"],
+        "triggers": {
+            "love": change_info.get("love_triggers_detected", []),
+            "hate": change_info.get("hate_triggers_detected", [])
+        }
+    }
+    
+    state["game_events"].append(event)
+
+
+def _extract_json_from_response(response: str) -> str:
+    """
+    Extrait le JSON d'une réponse LLM.
+    """
+    import re
+    
+    # Nettoie la réponse
+    if hasattr(response, 'content'):
+        text = response.content
+    else:
+        text = str(response)
+    
+    # Cherche le JSON
+    json_match = re.search(r'\{.*\}', text, re.DOTALL)
+    if json_match:
+        return json_match.group(0)
+    
+    return ""
+
+
+# Fonction utilitaire pour obtenir le niveau de relation
+def get_relation_level(relation_value: int) -> str:
+    """
+    Retourne le niveau de relation sous forme textuelle.
+    
+    Args:
+        relation_value: Valeur numérique de la relation (-10 à 10)
+        
+    Returns:
+        Description textuelle du niveau de relation
+    """
+    if relation_value >= 8:
+        return "Adoré"
+    elif relation_value >= 5:
+        return "Très apprécié"
+    elif relation_value >= 2:
+        return "Apprécié"
+    elif relation_value >= -1:
+        return "Neutre"
+    elif relation_value >= -4:
+        return "Méfiant"
+    elif relation_value >= -7:
+        return "Hostile"
+    else:
+        return "Détesté"

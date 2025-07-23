@@ -10,144 +10,121 @@ from echoforge.core.llm_providers import LLMManager
 from echoforge.core import EchoForgeRAG
 from echoforge.utils.config import get_config
 from langsmith import traceable
+import re
 
 
 class SearchWorldKnowledgeTool(BaseTool):
     """Tool pour rechercher dans les connaissances du monde"""
-    name: str = "search_world"
-    description: str = "Recherche dans les connaissances générales du monde et de l'île. Utilise pour : histoire, lieux, événements globaux."
-    rag_system: EchoForgeRAG
-    evaluate_tool: Optional['EvaluateRelevanceTool'] = None
+    name:str = "search_world"
+    description:str = "Recherche dans les connaissances générales du monde et de l'île. Utilise pour : histoire, lieux, événements globaux."
+    rag_system: Any
+    evaluate_tool: Any  # Référence à l'outil d'évaluation
     
     def _run(self, query: str) -> str:
-        """Execute la recherche dans le monde"""
+        """Execute the tool"""
         try:
-            results = []
+            print(f"🔍 Recherche dans world_lore avec query: '{query}'")
+            results = self.rag_system.retrieve_world_context(query, top_k=5)
             
-            # Recherche uniquement dans les connaissances du monde
-            world_context = self.rag_system.retrieve_world_context(query, top_k=5)
-            for i, content in enumerate(world_context):
-                results.append({
+            # Formater pour l'affichage
+            if results:
+                print(f"📄 {len(results)} documents trouvés")
+                for r in results[:3]:  # Afficher les 3 premiers
+                    print(f"  - {r[:80]}...")
+            
+            # Convertir en format structuré pour l'agent
+            formatted_results = []
+            for i, content in enumerate(results):
+                formatted_results.append({
                     "content": content,
                     "source": "world_knowledge",
                     "relevance": "high" if i == 0 else "medium"
                 })
             
-            results_json = json.dumps(results, indent=2, ensure_ascii=False)
-            
-            # Stocker les résultats pour l'outil d'évaluation
+            # IMPORTANT: Mettre à jour _last_results sur l'instance evaluate_tool
             if self.evaluate_tool:
-                # Ajouter aux résultats existants ou créer
-                if hasattr(self.evaluate_tool, 'last_results') and self.evaluate_tool.last_results:
-                    try:
-                        existing = json.loads(self.evaluate_tool.last_results)
-                        existing.extend(results)
-                        self.evaluate_tool.last_results = json.dumps(existing, indent=2, ensure_ascii=False)
-                    except:
-                        self.evaluate_tool.last_results = results_json
-                else:
-                    self.evaluate_tool.last_results = results_json
+                self.evaluate_tool._last_results = formatted_results
+                self.evaluate_tool._last_source = "world"
             
-            return results_json
+            return json.dumps(formatted_results, ensure_ascii=False)
             
         except Exception as e:
-            return f"Erreur lors de la recherche monde: {str(e)}"
-    
-    async def _arun(self, query: str) -> str:
-        return self._run(query)
-
+            return f"Erreur lors de la recherche: {str(e)}"
 
 class SearchCharacterKnowledgeTool(BaseTool):
     """Tool pour rechercher dans les connaissances du personnage"""
-    name: str = "search_character"
-    description: str = "Recherche dans les connaissances personnelles du personnage. Utilise pour : souvenirs, relations, secrets personnels, enfance."
-    rag_system: EchoForgeRAG
+    name:str = "search_character"
+    description:str = "Recherche dans les connaissances personnelles du personnage. Utilise pour : souvenirs, relations, secrets personnels, enfance."
+    rag_system: Any
     character_name: str
-    evaluate_tool: Optional['EvaluateRelevanceTool'] = None
+    evaluate_tool: Any  # Référence à l'outil d'évaluation
     
     def _run(self, query: str) -> str:
-        """Execute la recherche sur le personnage"""
+        """Execute the tool"""
         try:
-            results = []
-            
-            # Recherche uniquement dans les connaissances du personnage
-            character_context = self.rag_system.retrieve_character_context(
+            print(f"🔍 Recherche dans character_{self.character_name} avec query: '{query}'")
+            results = self.rag_system.retrieve_character_context(
                 query, self.character_name.lower(), top_k=5
             )
-            for i, content in enumerate(character_context):
-                results.append({
+            
+            # Formater pour l'affichage
+            if results:
+                print(f"📄 {len(results)} documents trouvés")
+                for r in results[:3]:  # Afficher les 3 premiers
+                    print(f"  - {r[:80]}...")
+            
+            # Convertir en format structuré
+            formatted_results = []
+            for i, content in enumerate(results):
+                formatted_results.append({
                     "content": content,
                     "source": f"{self.character_name}_knowledge",
                     "relevance": "high" if i == 0 else "medium"
                 })
             
-            results_json = json.dumps(results, indent=2, ensure_ascii=False)
-            
-            # Stocker les résultats pour l'outil d'évaluation
+            # IMPORTANT: Mettre à jour _last_results sur l'instance evaluate_tool
             if self.evaluate_tool:
-                # Ajouter aux résultats existants ou créer
-                if hasattr(self.evaluate_tool, 'last_results') and self.evaluate_tool.last_results:
-                    try:
-                        existing = json.loads(self.evaluate_tool.last_results)
-                        existing.extend(results)
-                        self.evaluate_tool.last_results = json.dumps(existing, indent=2, ensure_ascii=False)
-                    except:
-                        self.evaluate_tool.last_results = results_json
-                else:
-                    self.evaluate_tool.last_results = results_json
+                self.evaluate_tool._last_results = formatted_results
+                self.evaluate_tool._last_source = "character"
             
-            return results_json
+            return json.dumps(formatted_results, ensure_ascii=False)
             
         except Exception as e:
-            return f"Erreur lors de la recherche personnage: {str(e)}"
-    
-    async def _arun(self, query: str) -> str:
-        return self._run(query)
+            return f"Erreur lors de la recherche: {str(e)}"
 
 
 class EvaluateRelevanceTool(BaseTool):
     """Tool pour évaluer la pertinence des résultats"""
-    name: str = "evaluate_relevance"
-    description: str = "Évalue si les derniers résultats de recherche sont suffisants pour répondre. Ne prend aucun paramètre."
-    last_results: Optional[str] = None
+    name:str = "evaluate_relevance"
+    description:str = "Évalue si les derniers résultats de recherche sont suffisants pour répondre. Ne prend aucun paramètre."
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._last_results = None
+        self._last_source = None
     
     def _run(self, query: str = "") -> str:
-        """Évalue la pertinence des derniers résultats"""
-        if not self.last_results:
-            return "error - aucun résultat à évaluer"
-            
-        try:
-            results = json.loads(self.last_results)
-            if not results:
-                return "insufficient - aucun résultat trouvé"
-            
-            # Analyse basique pour aider l'agent
-            has_high_relevance = any(r.get("relevance") == "high" for r in results)
-            has_character_info = any("_knowledge" in r.get("source", "") for r in results)
-            has_world_info = any(r.get("source") == "world_knowledge" for r in results)
-            has_content = all(r.get("content", "").strip() for r in results)
-            
-            if has_high_relevance and has_content:
-                info_type = []
-                if has_character_info:
-                    info_type.append("personnage")
-                if has_world_info:
-                    info_type.append("monde")
-                return f"sufficient - informations pertinentes trouvées ({' et '.join(info_type)})"
-            elif has_content:
-                return "partial - informations trouvées mais pertinence moyenne"
-            else:
-                return "insufficient - informations insuffisantes ou non pertinentes"
-                
-        except Exception as e:
-            return f"error - impossible d'évaluer: {str(e)}"
+        """Execute the tool - accepte un argument optionnel mais ne l'utilise pas"""
+        if not self._last_results:
+            return "none - aucune recherche effectuée"
+        
+        # Évaluer la pertinence
+        high_relevance_count = sum(1 for r in self._last_results if r.get("relevance") == "high")
+        total_results = len(self._last_results)
+        
+        if high_relevance_count > 0:
+            return f"sufficient - informations pertinentes trouvées ({self._last_source})"
+        elif total_results > 0:
+            return f"partial - quelques informations trouvées mais peu pertinentes ({self._last_source})"
+        else:
+            return "insufficient - aucune information pertinente trouvée"
+    
+    async def _arun(self, query: str = "") -> str:
+        return self._run(query)
     
     def reset(self):
         """Réinitialise les résultats stockés"""
         self.last_results = None
-    
-    async def _arun(self, query: str = "") -> str:
-        return self._run(query)
 
 
 class AnalyzeQuestionTool(BaseTool):
@@ -345,20 +322,9 @@ class ReactRAGAgent:
     ) -> Dict[str, Any]:
         """
         Traite le besoin de RAG et effectue les recherches si nécessaire.
-        
-        Returns:
-            Dict avec:
-            - needs_rag: bool
-            - search_performed: bool
-            - relevant_knowledge: List[str]
-            - search_queries: List[str]
-            - evaluation: str
-            - reasoning: str
         """
-        
         # Créer les tools
         evaluate_tool = EvaluateRelevanceTool()
-        
         tools = [
             AnalyzeQuestionTool(),
             SearchWorldKnowledgeTool(
@@ -366,7 +332,7 @@ class ReactRAGAgent:
                 evaluate_tool=evaluate_tool
             ),
             SearchCharacterKnowledgeTool(
-                rag_system=self.rag_system, 
+                rag_system=self.rag_system,
                 character_name=character_name,
                 evaluate_tool=evaluate_tool
             ),
@@ -388,9 +354,10 @@ class ReactRAGAgent:
             agent=agent,
             tools=tools,
             verbose=True,
-            max_iterations=4,  # Réduit pour éviter les boucles
+            max_iterations=4,
             handle_parsing_errors=True,
-            max_execution_time=30  # Timeout de 30 secondes
+            max_execution_time=30,
+            return_intermediate_steps=True  # Important pour récupérer les étapes
         )
         
         # Exécuter l'agent
@@ -404,36 +371,85 @@ class ReactRAGAgent:
             # Parser le résultat
             final_answer = result.get("output", "{}")
             
-            # Extraire le JSON de la réponse
-            import re
-            json_match = re.search(r'\{.*\}', final_answer, re.DOTALL)
-            if json_match:
-                parsed_result = json.loads(json_match.group())
-                # S'assurer que tous les champs sont présents
-                return {
-                    "needs_rag": parsed_result.get("needs_rag", False),
-                    "search_performed": parsed_result.get("search_performed", False),
-                    "relevant_knowledge": parsed_result.get("relevant_knowledge", []),
-                    "search_queries": parsed_result.get("search_queries", []),
-                    "evaluation": parsed_result.get("evaluation", "none"),
-                    "reasoning": parsed_result.get("reasoning", "Aucune recherche nécessaire")
-                }
+            # Extraire les résultats RAG des étapes intermédiaires
+            search_performed = False
+            search_queries = []
+            rag_results = []  # Liste des résultats RAG formatés
+            
+            if 'intermediate_steps' in result:
+                for action, observation in result['intermediate_steps']:
+                    if hasattr(action, 'tool') and hasattr(action, 'tool_input'):
+                        # Si c'est une recherche
+                        if action.tool in ['search_world', 'search_character']:
+                            search_performed = True
+                            search_queries.append(action.tool_input)
+                            
+                            # Parser l'observation qui contient les résultats JSON
+                            try:
+                                if isinstance(observation, str):
+                                    # L'observation est une string JSON
+                                    search_results = json.loads(observation)
+                                    if isinstance(search_results, list):
+                                        # Ajouter chaque résultat à rag_results
+                                        for item in search_results:
+                                            if isinstance(item, dict) and 'content' in item:
+                                                rag_results.append({
+                                                    "content": item.get("content", ""),
+                                                    "metadata": {
+                                                        "source": item.get("source", "unknown"),
+                                                        "type": "character" if "character" in action.tool else "world",
+                                                        "importance": "high" if item.get("relevance") == "high" else "medium"
+                                                    },
+                                                    "relevance": 0.9 if item.get("relevance") == "high" else 0.7,
+                                                    "source": item.get("source", "unknown")
+                                                })
+                            except json.JSONDecodeError:
+                                print(f"Erreur parsing observation JSON: {observation}")
+            
+            # Extraire le JSON de la réponse finale
+            json_text = None
+            final_answer_match = re.search(r'Final Answer:\s*(\{.*?\})', final_answer, re.DOTALL)
+            if final_answer_match:
+                json_text = final_answer_match.group(1)
             else:
-                # Fallback si pas de JSON trouvé
-                return {
-                    "needs_rag": False,
-                    "search_performed": False,
-                    "relevant_knowledge": [],
-                    "search_queries": [],
-                    "evaluation": "none",
-                    "reasoning": "Pas de recherche effectuée (parsing error)"
-                }
-                
+                json_match = re.search(r'\{[^{}]*\}', final_answer, re.DOTALL)
+                if json_match:
+                    json_text = json_match.group()
+            
+            if json_text:
+                try:
+                    parsed_result = json.loads(json_text)
+                    
+                    # Retourner les résultats avec les rag_results extraits
+                    return {
+                        "needs_rag": parsed_result.get("needs_rag", search_performed),
+                        "search_performed": search_performed,
+                        "rag_results": rag_results,  # Les vrais résultats RAG
+                        "relevant_knowledge": [r["content"] for r in rag_results],  # Pour compatibilité
+                        "search_queries": search_queries,
+                        "evaluation": parsed_result.get("evaluation", "none"),
+                        "reasoning": parsed_result.get("reasoning", "Recherche effectuée" if search_performed else "Aucune recherche nécessaire")
+                    }
+                except json.JSONDecodeError as e:
+                    print(f"Erreur de parsing JSON: {e}")
+            
+            # Fallback avec les résultats RAG extraits
+            return {
+                "needs_rag": search_performed,
+                "search_performed": search_performed,
+                "rag_results": rag_results,
+                "relevant_knowledge": [r["content"] for r in rag_results],
+                "search_queries": search_queries,
+                "evaluation": "sufficient" if rag_results else "none",
+                "reasoning": "Recherche effectuée" if search_performed else "Pas de recherche effectuée"
+            }
+            
         except Exception as e:
             print(f"Erreur dans l'agent RAG ReAct: {e}")
             return {
                 "needs_rag": False,
                 "search_performed": False,
+                "rag_results": [],
                 "relevant_knowledge": [],
                 "search_queries": [],
                 "evaluation": "error",

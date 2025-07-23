@@ -133,107 +133,166 @@ def _generate_llm_response(state: CharacterState) -> Dict[str, Any]:
 def _build_comprehensive_prompt(state: CharacterState) -> str:
     """
     Construit un prompt complet avec tout le contexte disponible.
-    🆕 Version améliorée avec intégration du contexte de mémoire.
+    🆕 Version corrigée avec gestion d'erreurs améliorée.
     """
     
-    # Récupération des données
-    character_name = state["character_name"]
-    personality = state["character_data"].get("personality")
-    emotion = state["character_data"].get("current_emotion", "neutral")
-    user_relation = state["character_data"].get("relation")
-    user_message = state["user_message"]
-    rag_results = state["rag_results"]
-    conversation_history = state.get("conversation_history", [])
-    all_triggers = state["character_data"].get("triggers", {}).get("input", {})
-    activated = state.get("activated_input_triggers", []) or []
-    refused = state.get("refused_input_triggers", []) or []
-    
-    # 🆕 Récupération du contexte de mémoire
-    context_summary = state.get("context_summary")
-    previous_summaries = state.get("previous_summaries", [])
-    total_interactions = state.get("total_interactions", 0)
-    memory_integration = state.get("memory_integration", {})
-    
-    # Format des intentions activées
-    def format_trigger_list(trigger_names):
-        return "\n".join([
-            f"- {trigger}: {all_triggers[trigger].get('trigger')} → effet attendu : {all_triggers[trigger].get('effect')}"
-            for trigger in trigger_names if trigger in all_triggers
-        ]) or "Aucune"
-    
-    def format_refused_trigger_list(refused_dict : list):
-        return "\n".join([
-            f"- {trigger.get('trigger')} → refusé car : {trigger.get('reason_refused')}"
-            for trigger in refused_dict
-        ]) or "Aucune"
-    
-    # Construction des sections du prompt
-    
-    # 1. Identité du personnage
-    identity_section = f"""Tu es {character_name}.
-PERSONNALITÉ: {_format_personality(personality)}
-ÉMOTION ACTUELLE: {emotion}
+    try:
+        # Récupération sécurisée des données
+        character_name = state.get("character_name", "Personnage")
+        character_data = state.get("character_data", {})
+        personality = character_data.get("personality", {})
+        emotion = character_data.get("current_emotion", "neutral")
+        user_relation = character_data.get("relation", 0)
+        user_message = state.get("user_message", "")
+        rag_results = state.get("rag_results", [])
+        conversation_history = state.get("conversation_history", [])
+        
+        # Gestion sécurisée des triggers
+        triggers_data = character_data.get("triggers", {})
+        input_triggers = triggers_data.get("input", {}) if isinstance(triggers_data, dict) else {}
+        activated = state.get("activated_input_triggers", []) or []
+        refused = state.get("refused_input_triggers", []) or []
+        
+        # 🆕 Récupération du contexte de mémoire
+        context_summary = state.get("context_summary")
+        previous_summaries = state.get("previous_summaries", [])
+        total_interactions = state.get("total_interactions", 0)
+        memory_integration = state.get("memory_integration", {})
+        
+        # Format des intentions activées (avec gestion d'erreurs)
+        def format_trigger_list(trigger_names):
+            try:
+                if not trigger_names or not input_triggers:
+                    return "Aucune"
+                
+                formatted_items = []
+                for trigger in trigger_names:
+                    if trigger in input_triggers:
+                        trigger_info = input_triggers[trigger]
+                        trigger_desc = trigger_info.get('trigger', 'Description manquante')
+                        trigger_effect = trigger_info.get('effect', 'Effet non spécifié')
+                        formatted_items.append(f"- {trigger}: {trigger_desc} → effet attendu : {trigger_effect}")
+                
+                return "\n".join(formatted_items) if formatted_items else "Aucune"
+            except Exception as e:
+                print(f"⚠️ Erreur format_trigger_list: {e}")
+                return "Erreur de formatage des triggers"
+        
+        def format_refused_trigger_list(refused_dict):
+            try:
+                if not refused_dict:
+                    return "Aucune"
+                
+                formatted_items = []
+                for trigger_info in refused_dict:
+                    if isinstance(trigger_info, dict):
+                        trigger_name = trigger_info.get('trigger', 'trigger_inconnu')
+                        reason = trigger_info.get('reason_refused', 'Raison non spécifiée')
+                        
+                        # Essayer de récupérer l'effet depuis input_triggers
+                        expected_effect = "Effet non spécifié"
+                        if trigger_name in input_triggers:
+                            expected_effect = input_triggers[trigger_name].get('effect', 'Effet non spécifié')
+                        
+                        formatted_items.append(
+                            f"- {trigger_name} devait avoir comme effet : {expected_effect} mais est refusé car : {reason}"
+                        )
+                
+                return "\n".join(formatted_items) if formatted_items else "Aucune"
+            except Exception as e:
+                print(f"⚠️ Erreur format_refused_trigger_list: {e}")
+                return "Erreur de formatage des triggers refusés"
+        
+        # Construction des sections du prompt avec gestion d'erreurs
+        
+        # 1. Identité du personnage (sécurisée)
+        try:
+            formatted_personality = _format_personality(personality)
+        except Exception as e:
+            print(f"⚠️ Erreur formatage personnalité: {e}")
+            formatted_personality = "Personnalité non disponible"
+        
+        identity_section = f"""Tu es {character_name}.
+PERSONNALITÉ: {formatted_personality}
 NIVEAU RELATION AVEC LE PERSONNAGE JOUEUR (entre -10 et 10) : {user_relation}"""
 
-    # 🆕 2. Section de contexte de mémoire
-    memory_section = ""
-    if context_summary or previous_summaries:
-        memory_section = f"""
+        # 🆕 2. Section de contexte de mémoire
+        memory_section = ""
+        try:
+            if context_summary or previous_summaries:
+                memory_section = f"""
 CONTEXTE DE MÉMOIRE (Total: {total_interactions} interactions):
 """
-        
-        if context_summary:
-            memory_section += f"""
+                
+                if context_summary:
+                    memory_section += f"""
 RÉSUMÉ CONTEXTUEL:
 {context_summary}
 """
-        
-        if previous_summaries and len(previous_summaries) > 0:
-            memory_section += f"""
+                
+                if previous_summaries and len(previous_summaries) > 0:
+                    memory_section += f"""
 RÉSUMÉS PRÉCÉDENTS ({len(previous_summaries)} disponibles):
 """
-            for i, summary in enumerate(previous_summaries[:2]):  # Limite à 2 résumés pour le prompt
-                summary_text = summary.get("text", "")
-                messages_count = summary.get("messages_count", 0)
-                memory_section += f"• Résumé {i+1} ({messages_count} échanges): {summary_text}\n"
-        
-        memory_section += f"""
+                    for i, summary in enumerate(previous_summaries[:2]):  # Limite à 2 résumés pour le prompt
+                        summary_text = summary.get("text", "") if isinstance(summary, dict) else str(summary)
+                        messages_count = summary.get("messages_count", 0) if isinstance(summary, dict) else 0
+                        memory_section += f"• Résumé {i+1} ({messages_count} échanges): {summary_text}\n"
+                
+                memory_section += f"""
 INTÉGRATION MÉMOIRE: {'Activée' if memory_integration.get('should_integrate', False) else 'Désactivée'}
 """
+        except Exception as e:
+            print(f"⚠️ Erreur section mémoire: {e}")
+            memory_section = "\nCONTEXTE DE MÉMOIRE: Non disponible"
 
-    # 3. Contexte RAG si disponible
-    rag_section = ""
-    if rag_results:
-        context_items = []
-        for result in rag_results[:3]:  # Limite à 3 résultats les plus pertinents
-            context_items.append(f"- {result['content']} (pertinence: {result['relevance']:.2f})")
-        
-        rag_section = f"""
+        # 3. Contexte RAG si disponible
+        rag_section = ""
+        try:
+            if rag_results:
+                context_items = []
+                for result in rag_results[:3]:  # Limite à 3 résultats les plus pertinents
+                    if isinstance(result, dict):
+                        content = result.get('content', 'Contenu manquant')
+                        relevance = result.get('relevance', 0.0)
+                        context_items.append(f"- {content} (pertinence: {relevance:.2f})")
+                    else:
+                        context_items.append(f"- {str(result)}")
+                
+                if context_items:
+                    rag_section = f"""
 CONNAISSANCES PERTINENTES:
 {chr(10).join(context_items)}"""
+        except Exception as e:
+            print(f"⚠️ Erreur section RAG: {e}")
+            rag_section = ""
 
-    # 4. Historique de conversation récent
-    history_section = ""
-    if conversation_history:
-        recent_history = conversation_history[-3:]  # 3 derniers échanges
-        history_items = []
-        for exchange in recent_history:
-            if isinstance(exchange, dict):
-                if "user" in exchange and "assistant" in exchange:
-                    history_items.append(f"Utilisateur: {exchange['user']}")
-                    history_items.append(f"Toi: {exchange['assistant']}")
-                elif exchange.get("role") == "user":
-                    history_items.append(f"Utilisateur: {exchange['content']}")
-                elif exchange.get("role") == "assistant":
-                    history_items.append(f"Toi: {exchange['content']}")
-        
-        if history_items:
-            history_section = f"""
+        # 4. Historique de conversation récent
+        history_section = ""
+        try:
+            if conversation_history:
+                recent_history = conversation_history[-3:]  # 3 derniers échanges
+                history_items = []
+                for exchange in recent_history:
+                    if isinstance(exchange, dict):
+                        if "user" in exchange and "assistant" in exchange:
+                            history_items.append(f"Utilisateur: {exchange['user']}")
+                            history_items.append(f"Toi: {exchange['assistant']}")
+                        elif exchange.get("role") == "user":
+                            history_items.append(f"Utilisateur: {exchange['content']}")
+                        elif exchange.get("role") == "assistant":
+                            history_items.append(f"Toi: {exchange['content']}")
+                
+                if history_items:
+                    history_section = f"""
 HISTORIQUE RÉCENT DE CETTE SESSION:
 {chr(10).join(history_items)}"""
+        except Exception as e:
+            print(f"⚠️ Erreur section historique: {e}")
+            history_section = ""
 
-    # 5. Section sur les intentions détectées
-    intent_section = f"""
+        # 5. Section sur les intentions détectées (sécurisée)
+        intent_section = f"""
 INTENTIONS DÉTECTÉES DANS LE MESSAGE DU JOUEUR :
 - Intentions activées :
 {format_trigger_list(activated)}
@@ -242,25 +301,27 @@ INTENTIONS DÉTECTÉES DANS LE MESSAGE DU JOUEUR :
 {format_refused_trigger_list(refused)}
 """
 
-    # 6. Instructions spécifiques avec intégration mémoire et restrictions
-    memory_instructions = ""
-    if context_summary or previous_summaries:
-        memory_instructions = f"""
+        # 6. Instructions spécifiques avec intégration mémoire et restrictions
+        memory_instructions = ""
+        if context_summary or previous_summaries:
+            memory_instructions = f"""
 8. Utilise le contexte de mémoire ci-dessus pour maintenir la cohérence avec les interactions passées.
 9. Si tu mentionnes des événements passés, assure-toi qu'ils sont cohérents avec le contexte de mémoire.
 10. Adapte ton niveau de familiarité selon l'historique des interactions ({total_interactions} interactions totales).
 """
 
-    # 7. Contraintes supplémentaires
-    constraint_section = f"""
+        # 7. Contraintes supplémentaires
+        constraint_section = f"""
 CONTRAINTES:
 - Tu NE DOIS PAS proposer ou initier d'actions ou déplacements non prévus par les intentions activées.
+- Tu NE DOIS PAS inventer de nouvelles personnes qui ne sont pas issues des connaissances ou de l'historique.
 - Tu NE DOIS PAS inventer de nouvelles mécaniques ou interactions qui ne sont pas décrites dans les intentions activées.
 - Tu PEUX réagir uniquement en fonction des intentions activées listées ci-dessus.
-- Si le joueur propose une action non prévue, ignore-la poliment ou refuse avec cohérence selon ta personnalité.
+- Si le joueur propose une action non prévue, refuse avec cohérence selon ta personnalité.
+
 """
 
-    instructions_section = f"""
+        instructions_section = f"""
 MESSAGE ACTUEL DE L'UTILISATEUR: "{user_message}"
 
 INSTRUCTIONS:
@@ -270,38 +331,86 @@ INSTRUCTIONS:
 4. Tiens compte de l'historique de conversation pour la cohérence.
 5. Si tu fais des actions physiques, mets-les entre *astérisques*.
 6. Réponds en français de manière authentique à ton personnage.
-7. Tu ne dois réagir qu’en fonction des intentions activées détectées.
+7. Tu ne dois réagir qu'en fonction des intentions activées détectées.
 {memory_instructions}
 {constraint_section}
 
 RÉPONSE:"""
 
-    # === Assemblage final avec mémoire ===
-    full_prompt = f"""{identity_section}{memory_section}{rag_section}{history_section}
+        # === Assemblage final avec mémoire ===
+        full_prompt = f"""{identity_section}{memory_section}{rag_section}{history_section}
 {intent_section}
 {instructions_section}"""
-    
-    return full_prompt
+        
+        return full_prompt
+        
+    except Exception as e:
+        print(f"❌ Erreur critique dans _build_comprehensive_prompt: {e}")
+        # Prompt de secours minimal
+        character_name = state.get("character_name", "Personnage")
+        user_message = state.get("user_message", "")
+        
+        return f"""Tu es {character_name}.
+        
+MESSAGE DE L'UTILISATEUR: "{user_message}"
+
+INSTRUCTIONS:
+1. Réponds en restant en personnage.
+2. Sois naturel et authentique.
+3. Si tu ne sais pas, dis-le simplement.
+
+RÉPONSE:"""
 
 
 def _format_personality(personality: Dict[str, Any]) -> str:
-    """Formate les traits de personnalité pour le prompt."""
+    """Formate les traits de personnalité pour le prompt - Version corrigée."""
     if not personality:
         return "Personnalité standard"
     
-    if isinstance(personality, dict):
-        traits = []
-        for key, value in personality.items():
-            if isinstance(value, (int, float)):
-                if value > 0.7:
-                    traits.append(f"{key} élevé")
-                elif value < 0.3:
-                    traits.append(f"{key} faible")
-            else:
-                traits.append(f"{key}: {value}")
-        return ", ".join(traits) if traits else "Équilibré"
+    if not isinstance(personality, dict):
+        return str(personality)
     
-    return str(personality)
+    # Gestion de la structure imbriquée de personality
+    traits_info = []
+    
+    # 1. Traiter les traits numériques s'ils existent
+    if "traits" in personality and isinstance(personality["traits"], dict):
+        for trait_name, trait_value in personality["traits"].items():
+            if isinstance(trait_value, (int, float)):
+                if trait_value > 0.7:
+                    traits_info.append(f"{trait_name} élevé ({trait_value})")
+                elif trait_value < 0.3:
+                    traits_info.append(f"{trait_name} faible ({trait_value})")
+                else:
+                    traits_info.append(f"{trait_name} modéré ({trait_value})")
+    
+    # 2. Ajouter les autres informations de personnalité
+    for key, value in personality.items():
+        if key == "traits":
+            continue  # Déjà traité
+        elif isinstance(value, str):
+            traits_info.append(f"{key}: {value}")
+        elif isinstance(value, (int, float)):
+            traits_info.append(f"{key}: {value}")
+        elif isinstance(value, dict):
+            # Gérer les sous-dictionnaires de manière sûre
+            try:
+                sub_items = []
+                for sub_key, sub_value in value.items():
+                    if isinstance(sub_value, (str, int, float, bool)):
+                        sub_items.append(f"{sub_key}={sub_value}")
+                if sub_items:
+                    traits_info.append(f"{key}: {', '.join(sub_items)}")
+            except Exception:
+                traits_info.append(f"{key}: {str(value)[:50]}...")
+        elif isinstance(value, list):
+            # Gérer les listes
+            if all(isinstance(item, (str, int, float)) for item in value):
+                traits_info.append(f"{key}: {', '.join(map(str, value))}")
+            else:
+                traits_info.append(f"{key}: liste de {len(value)} éléments")
+    
+    return "; ".join(traits_info) if traits_info else "Personnalité équilibrée"
 
 
 def _generate_fallback_response(state: CharacterState) -> str:

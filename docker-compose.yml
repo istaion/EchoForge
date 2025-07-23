@@ -1,0 +1,36 @@
+version: '3.9'
+
+services:
+  echoforge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: echoforge
+    env_file: .env
+    ports:
+      - "${ECHOFORGE_GRADIO_SERVER_PORT:-7860}:7860"
+    volumes:
+      - ./data:/app/data
+      - ./vector_stores:/app/vector_stores
+      - ./models:/app/models
+      - ./echoforge:/app/echoforge
+    depends_on:
+      - db
+    environment:
+      ECHOFORGE_DATABASE_URL: postgresql+psycopg2://postgres:postgres@db:5432/echoforge
+
+  db:
+    image: postgres:15
+    container_name: echoforge-db
+    restart: always
+    environment:
+      POSTGRES_DB: echoforge
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

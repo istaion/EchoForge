@@ -80,3 +80,77 @@ class ConversationMessage(SQLModel, table=True):
         default_factory=datetime.utcnow,
         sa_column=Column(DateTime(timezone=True))
     )
+
+
+class GameSession(SQLModel, table=True):
+    """Sessions de jeu stockées en base."""
+    
+    __tablename__ = "game_sessions"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    
+    # Identifiants
+    session_id: str = Field(index=True, unique=True, description="ID unique de la session")
+    session_name: str = Field(description="Nom affiché de la session")
+    
+    # Données de jeu
+    player_data: Dict[str, Any] = Field(
+        default_factory=dict,
+        sa_column=Column(JSON),
+        description="Données complètes du joueur"
+    )
+    characters_data: Dict[str, Any] = Field(
+        default_factory=dict,
+        sa_column=Column(JSON),
+        description="Données complètes des personnages"
+    )
+    
+    # Métadonnées
+    game_state: Dict[str, Any] = Field(
+        default_factory=dict,
+        sa_column=Column(JSON),
+        description="État du jeu (position montgolfière, etc.)"
+    )
+    
+    # Statistiques
+    total_playtime_seconds: int = Field(default=0, description="Temps de jeu total en secondes")
+    last_character_talked: Optional[str] = Field(default=None, description="Dernier personnage parlé")
+    messages_count: int = Field(default=0, description="Nombre total de messages")
+    
+    # Statut
+    is_active: bool = Field(default=True, description="Session active ou archivée")
+    is_completed: bool = Field(default=False, description="Jeu terminé (montgolfière réparée)")
+    
+    # Timestamps
+    created_at: datetime = Field(
+        default_factory=datetime.utcnow,
+        sa_column=Column(DateTime(timezone=True))
+    )
+    updated_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True))
+    )
+    last_played_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True))
+    )
+
+
+class SessionEvent(SQLModel, table=True):
+    """Événements de session pour analytics."""
+    
+    __tablename__ = "session_events"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    
+    session_id: str = Field(index=True, foreign_key="game_sessions.session_id")
+    event_type: str = Field(description="Type d'événement (conversation, quest, etc.)")
+    event_data: Dict[str, Any] = Field(
+        default_factory=dict,
+        sa_column=Column(JSON)
+    )
+    
+    created_at: datetime = Field(
+        default_factory=datetime.utcnow,
+        sa_column=Column(DateTime(timezone=True))
+    )

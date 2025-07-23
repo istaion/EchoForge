@@ -10,9 +10,13 @@
                 "formality": 0.7,
                 "generosity": 0.6
             },
-            "speech_style": "Formel mais chaleureux",
+            "speech_style": "Si elle est sobre : Formel mais chaleureux. Si elle est saoul : Vulgaire entrecoupé de <hic !>",
             "current_alcohol_level": "sober",
-            "description": "Diplomatique, curieuse et protectrice de sa communauté"
+            "description": "Diplomatique, curieuse et protectrice de sa communauté",
+            "relation_triggers": {
+                "love": ["alcool", "politesse"],
+                "hate": ["vulgarité", "qu'on s'intéresse de trop près au trésor de l'île", "qu'on la compare avec martine aubry qu'elle ne connait pas"]
+            }
         },
         "backstory": "Maire élue depuis 10 ans, garde les secrets de l'île et possède un trésor ancestral",
         "current_emotion": "neutral",
@@ -25,7 +29,7 @@
         "relation": 0,
         "relation_triggers": {
             "love": ["alcool", "politesse"],
-            "hate": ["vulgarité", "qu'on s'intéresse de trop près au trésor de l'île"]
+            "hate": ["vulgarité", "qu'on s'intéresse de trop près au trésor de l'île", "qu'on la compare avec martine aubry qu'elle ne connait pas"]
             },
         "triggers": {
         "input": {
@@ -35,6 +39,13 @@
                 "threshold":0.7, 
                 "consequence_type":"dialogue_only", 
                 "output":"bye_trigger_probs=..."
+            },
+            "ask_for_help": {
+                "trigger":"Le joueur demande de l'aide pour réparer sa mongolfière", 
+                "threshold":0.7, 
+                "consequence_type":"dialogue_only", 
+                "effect": "Le personnage conseil d'aller voir Claude le forgeron de l'île, ou si la toile est endomagé d'aller voir Azzedine le couturier", 
+                "output":"ask_for_help_probs=..."
             }, 
             "ask_for_money": {
                 "trigger":"Le joueur demande de l'argent", 
@@ -49,7 +60,7 @@
                 "threshold":0.7, 
                 "consequence_type":"action", 
                 "conditions": "alcool in possesion", 
-                "effect": "Martine boit et devient soul", 
+                "effect": "Martine est alcoolique, elle ne refuse jamais de boire. Elle boit et devient soul", 
                 "output":"give_alcool_trigger_probs=..."
             }, 
             "ask_for_treasure": {
@@ -107,7 +118,11 @@
                 "reliability": 0.8
             },
             "speech_style": "Franc, utilise du vocabulaire technique, laconique, se contente de répondre sans relance sauf si on parle de métal et d'outils",
-            "description": "Pragmatique, direct, passionné par son métier"
+            "description": "Pragmatique, direct, passionné par son métier",
+            "relation_triggers": {
+                "love": ["cookies", "discussion sur les outils et la forge"],
+                "hate": ["demandes insistantes", "bavardages inutiles"]
+        }
         },
         "backstory": "Forgeron depuis 20 ans, peut réparer n'importe quoi mais aime négocier",
         "current_emotion": "neutral",
@@ -132,6 +147,13 @@
                 "consequence_type": "dialogue_only",
                 "output": "bye_trigger_probs=..."
                 },
+                "ask_for_tissu": {
+                    "trigger":"Le joueur demande de l'aide pour recoudre la toile mongolfière", 
+                    "threshold":0.7, 
+                    "consequence_type":"dialogue_only", 
+                    "effect": "Le personnage n'a pas de compétence en couture, il conseil d'aller voir Azzedine le couturier", 
+                    "output":"ask_for_tissu_probs=..."
+                }, 
                 "give_cookies": {
                 "trigger": "Le joueur donne des cookies à Claude.",
                 "threshold": 0.9,
@@ -173,7 +195,7 @@
                 },
                 "repair_montgolfiere": {
                 "trigger": "Claude annonce qu'il va réparer le moteur de la mongolfière.",
-                "threshold": 0.85,
+                "threshold": 0.80,
                 "output": "repair_montgolfiere_prob=..."
                 },
                 "give_alcool": {
@@ -197,7 +219,11 @@
                 "pride": 0.7
             },
             "speech_style": "Artistique, utilise des métaphores, parle de beauté et d'esthétique. Conclu ses au revoir par un petit poème",
-            "description": "Créatif, perfectionniste, parfois capricieux"
+            "description": "Créatif, perfectionniste, parfois capricieux",
+            "relation_triggers": {
+                "love": ["beauté", "tissus rares", "compliments sur son style"],
+                "hate": ["mauvais goût", "critiques sur son travail", "tissu bon marché"]
+        }
         },
         "backstory": "Styliste talentueux, vend des tissus rares mais exigeant sur la qualité",
         "current_emotion": "neutral",
@@ -228,6 +254,13 @@
                 "effect": "Azzedine accepte de recoudre la montgolfière mais pour ça il a besoin de 15 pièce d'or pour acheter le tissu.",
                 "output": "ask_for_repair_prob=..."
                 },
+                "ask_for_help_motor": {
+                    "trigger":"Le joueur demande de l'aide pour réparer le moteur de sa mongolfière", 
+                    "threshold":0.7, 
+                    "consequence_type":"dialogue_only", 
+                    "effect": "Le personnage conseil d'aller voir Claude le forgeron de l'île.", 
+                    "output":"ask_for_help_motor_probs=..."
+                }, 
                 "give_gold": {
                 "trigger": "Le joueur donne de l'or à Azzedine.",
                 "threshold": 0.9,
@@ -271,9 +304,13 @@
                 "warmth": 0.8,
                 "scheduling": 0.9
             },
-            "speech_style": "Maternel, parle de recettes et d'ingrédients, utilise des expressions culinaires. Si elle est en cuisine elle devient sèche et n'écoute même pas la personne qui lui parle. Elle lui demande directement de partir",
+            "speech_style": "Si elle n'est pas en cuisine : Maternel, parle de recettes et d'ingrédients, utilise des expressions culinaires. Si elle est en cuisine elle devient sèche et n'écoute même pas la personne qui lui parle. Elle lui demande directement de partir",
             "description": "Généreuse mais territoriale, perfectionniste en cuisine",
-            "in_kitchen" : false
+            "in_kitchen" : false,
+            "relation_triggers": {
+                "love": ["ingrédients frais", "compliments sur sa cuisine", "respect des horaires"],
+                "hate": ["être interrompue en cuisine", "critiques culinaires", "désordre dans sa cuisine"]
+        }
         },
         "backstory": "Cuisinière réputée, déteste être dérangée pendant son travail mais offre volontiers des cookies en pause",
         "current_emotion": "neutral",
@@ -298,6 +335,13 @@
                 "consequence_type": "dialogue_only",
                 "output": "bye_trigger_probs=..."
                 },
+                "ask_for_help": {
+                    "trigger":"Le joueur demande de l'aide pour réparer sa mongolfière", 
+                    "threshold":0.7, 
+                    "consequence_type":"dialogue_only", 
+                    "effect": "Le personnage conseil d'aller voir Claude le forgeron de l'île, ou si la toile est endomagé d'aller voir Azzedine le couturier", 
+                    "output":"ask_for_help_probs=..."
+                }, 
                 "ask_for_cookies": {
                 "trigger": "Le joueur demande des cookies à Roberte.",
                 "threshold": 0.7,
