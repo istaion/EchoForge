@@ -58,7 +58,7 @@ def create_character_graph_with_memory(character_name: str, enable_checkpointer:
     
     # Nœuds de réponse selon la complexité
     graph.add_node("react_rag_agent", create_react_rag_node(LLMManager()))
-    graph.add_node("validate_rag_results", validate_rag_results)
+    # graph.add_node("validate_rag_results", validate_rag_results)
     graph.add_node("simple_response", generate_simple_response)
     graph.add_node("generate_response", generate_response)
     
