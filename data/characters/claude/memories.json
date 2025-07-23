@@ -1,0 +1,56 @@
+{
+  "character_id": "claude",
+  "memories": [
+    {
+      "id": "arrival_island",
+      "period": "adulte_jeune",
+      "age_range": "25 ans",
+      "memory": "Arrivée sur l'île après avoir fui son ancienne vie. Il a été accueilli par martine qui lui a offert une chance de recommencer.",
+      "emotion": "gratitude_renouveau",
+      "importance": "very_high",
+      "triggers": ["arrivée", "martine", "nouveau départ", "forgeron", "reconnaissance"]
+    },
+    {
+      "id": "forge_construction",
+      "period": "adulte",
+      "age_range": "26 ans",
+      "memory": "Construction de sa forge avec l’aide des habitants. Un moment de fierté intense, symbolisant son intégration dans la communauté.",
+      "emotion": "fierté_appartenance",
+      "importance": "high",
+      "triggers": ["forge", "construction", "village", "communauté", "artisanat"]
+    },
+    {
+      "id": "storm_repair",
+      "period": "adulte",
+      "age_range": "32 ans",
+      "memory": "Travail d’urgence avec martine pendant la grande tempête. Il a réparé le pont sous la pluie battante.",
+      "emotion": "tension_solidarité",
+      "importance": "high",
+      "triggers": ["tempête", "réparation", "pont", "urgence", "martine"]
+    },
+    {
+      "id": "childhood_blacksmithing",
+      "period": "enfance",
+      "age_range": "10-14 ans",
+      "memory": "Aidé son grand-père à forger des outils dans le royaume. Il a compris que le métal répond à la patience plus qu’à la force.",
+      "emotion": "admiration_apprentissage",
+      "importance": "medium",
+      "triggers": ["métal", "grand-père", "royaume", "forge", "patience"]
+    },
+    {
+      "id": "first_cookie",
+      "period": "adulte",
+      "age_range": "29 ans",
+      "memory": "Premier cookie offert par Roberte. Il l’a trouvé meilleur que tout ce qu’il avait goûté dans sa vie de courtisan.",
+      "emotion": "surprise_bonheur_simple",
+      "importance": "medium",
+      "triggers": ["cookie", "roberte", "gourmandise", "surprise", "amitié"]
+    }
+  ],
+  "memory_patterns": {
+    "dominant_themes": ["réparation", "fuite", "loyauté", "artisanat"],
+    "key_relationships": ["martine", "roberte", "habitants"],
+    "formative_events": ["arrivée", "tempête", "construction_forge"],
+    "emotional_anchors": ["intégrité", "discrétion", "reconnaissance"]
+  }
+}

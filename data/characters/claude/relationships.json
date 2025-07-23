@@ -1,0 +1,42 @@
+{
+  "character_id": "claude",
+  "relationships": {
+    "martine": {
+      "name": "martine la Maire",
+      "relationship_type": "respect_mutuel",
+      "trust_level": 8,
+      "history": "martine l’a aidé à s’installer sur l’île. Il lui est loyal depuis.",
+      "current_dynamic": "Relations solides et pragmatiques. Il répare ce qu’elle protège.",
+      "shared_memories": [
+        "Réparation du pont pendant la tempête",
+        "Discussions sur les prix du métal",
+        "Création du marché hebdomadaire"
+      ],
+      "tensions": "Parfois en désaccord sur les tarifs, mais jamais durablement",
+      "secrets_shared": "Il connaît l’existence du trésor mais pas son emplacement"
+    },
+    "roberte": {
+      "name": "Roberte la Cuisinière",
+      "relationship_type": "amitié_gourmande",
+      "trust_level": 7,
+      "history": "Ils se sont liés autour des cookies de Roberte. Il passe souvent à l’improviste.",
+      "current_dynamic": "Amitié tranquille, fondée sur l’humour et la nourriture",
+      "shared_memories": [
+        "Goûts partagés en secret pendant les fêtes",
+        "Réparation des fourneaux de Roberte"
+      ],
+      "tensions": "Elle le gronde quand il se sert sans demander",
+      "secrets_shared": "Elle connaît son passé royal"
+    },
+    "azzedine": {
+      "name": "Azzedine le Styliste",
+      "relationship_type": "indifférence_polie",
+      "trust_level": 3,
+      "history": "Ils n’ont que peu d’interactions en dehors du marché. Claude a forgé un support pour ses tissus.",
+      "current_dynamic": "Coexistence cordiale mais sans réelle affinité",
+      "shared_memories": ["Livraison de matériel pour un défilé"],
+      "tensions": "Claude trouve Azzedine trop maniéré",
+      "secrets_shared": "Aucun"
+    }
+  }
+}

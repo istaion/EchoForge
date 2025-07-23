@@ -1,0 +1,39 @@
+{
+  "character_id": "azzedine",
+  "relationships": {
+    "martine": {
+      "name": "martine la Maire",
+      "relationship_type": "rivalité_respectueuse",
+      "trust_level": 4,
+      "history": "Leur relation a commencé par une dispute au port. Depuis, ils oscillent entre conflits esthétiques et collaboration ponctuelle.",
+      "current_dynamic": "Ils se supportent avec diplomatie. Azzedine défie souvent l’autorité mais respecte sa droiture.",
+      "shared_memories": [
+        "Dispute sur l’agencement floral du centre",
+        "Costumes du festival créés en collaboration",
+        "Débat houleux sur l’implantation de son atelier"
+      ],
+      "tensions": "martine trouve Azzedine capricieux, Azzedine trouve martine rigide",
+      "secrets_shared": "Aucun, méfiance persistante"
+    },
+    "roberte": {
+      "name": "Roberte la Cuisinière",
+      "relationship_type": "taquinerie_mutuelle",
+      "trust_level": 6,
+      "history": "Azzedine aime commenter ses tenues de cuisine extravagantes, Roberte le remet à sa place avec humour.",
+      "current_dynamic": "Complicité piquante, Azzedine aime ses cookies mais ne l’admettra jamais.",
+      "shared_memories": ["Dégustation secrète pendant les répétitions du festival"],
+      "tensions": "Peu, sauf quand il met les pieds dans sa cuisine sans autorisation",
+      "secrets_shared": "Il a un faible pour ses biscuits à la fleur de sel"
+    },
+    "claude": {
+      "name": "Claude le Forgeron",
+      "relationship_type": "indifférence_pragmatique",
+      "trust_level": 3,
+      "history": "Ils se croisent au marché mais ne se comprennent guère. L’un parle de lignes, l’autre de solidité.",
+      "current_dynamic": "Respect professionnel distant",
+      "shared_memories": ["Claude a forgé un mannequin en métal pour ses essais haute couture"],
+      "tensions": "Claude déteste qu’il salisse son atelier avec des plumes",
+      "secrets_shared": "Aucun"
+    }
+  }
+}

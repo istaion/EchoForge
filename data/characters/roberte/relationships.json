@@ -1,0 +1,42 @@
+{
+  "character_id": "roberte",
+  "relationships": {
+    "martine": {
+      "name": "martine la Maire",
+      "relationship_type": "amitié_fusionnelle",
+      "trust_level": 10,
+      "history": "Amies d'enfance. Roberte connaît tous les secrets de martine et l’a toujours soutenue.",
+      "current_dynamic": "Roberte est sa conseillère officieuse et protectrice discrète.",
+      "shared_memories": [
+        "Exploration des grottes",
+        "Recettes traditionnelles partagées",
+        "Organisation du banquet de victoire"
+      ],
+      "tensions": "Aucune significative",
+      "secrets_shared": "Trésor ancestral, lignée des gardiens, pouvoirs magiques de martine"
+    },
+    "claude": {
+      "name": "Claude le Forgeron",
+      "relationship_type": "amitié_tranquille",
+      "trust_level": 7,
+      "history": "Ils s’échangent des plats contre des réparations. Claude adore ses soupes, elle aime son calme.",
+      "current_dynamic": "Complicité simple et discrète",
+      "shared_memories": [
+        "Réparations de ses fourneaux",
+        "Pause-café pendant les tempêtes"
+      ],
+      "tensions": "Claude mange trop de cookies",
+      "secrets_shared": "Passé royal de Claude"
+    },
+    "azzedine": {
+      "name": "Azzedine le Styliste",
+      "relationship_type": "taquinerie_affectueuse",
+      "trust_level": 6,
+      "history": "Il critique ses tenues de cuisine, elle critique ses manières, mais ils s’apprécient au fond.",
+      "current_dynamic": "Jeu d’esprits aiguisés autour d’une part de gâteau",
+      "shared_memories": ["Partages secrets de recettes en échange de tissus tachés"],
+      "tensions": "Elle déteste qu’il touche à ses épices",
+      "secrets_shared": "Elle devine son talent magique sans le lui dire"
+    }
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "character_id": "martine",
+  "relationships": {
+    "claude": {
+      "name": "Claude le Forgeron",
+      "relationship_type": "respect_mutuel",
+      "trust_level": 8,
+      "history": "Se connaissent depuis 15 ans, depuis que Claude s'est installé sur l'île. martine a aidé Claude à obtenir son atelier, et Claude a toujours été loyal envers la communauté.",
+      "current_dynamic": "martine respecte l'expertise de Claude et compte sur lui pour les réparations importantes de l'île. Claude respecte l'autorité de martine et consulte souvent ses décisions.",
+      "shared_memories": [
+        "Construction de l'atelier de forge en 1210",
+        "Réparation d'urgence du pont principal lors de la tempête de 1218",
+        "Négociations pour l'approvisionnement en métal avec les marchands"
+      ],
+      "tensions": "Parfois en désaccord sur les prix que Claude pratique avec les habitants, mais rien de grave",
+      "secrets_shared": "Claude connaît l'existence du trésor ancestral mais pas son emplacement exact"
+    },
+    "azzedine": {
+      "name": "Azzedine le Styliste",
+      "relationship_type": "tension_professionnelle",
+      "trust_level": 4,
+      "history": "Azzedine est arrivé sur l'île il y a 5 ans avec de grandes ambitions artistiques. martine l'a accueilli mais leurs visions divergent souvent.",
+      "current_dynamic": "Relation tendue mais respectueuse. martine trouve Azzedine trop capricieux et élitiste, tandis qu'Azzedine pense que martine manque de vision artistique.",
+      "shared_memories": [
+        "Première rencontre houleuse au port en 1220",
+        "Dispute publique sur la décoration de la place centrale",
+        "Collaboration réussie pour les costumes de la fête de l'île en 1223"
+      ],
+      "tensions": "Azzedine critique souvent les choix esthétiques de l'île et refuse de participer aux projets communautaires sans compensation",
+      "secrets_shared": "Aucun secret important partagé, méfiance mutuelle"
+    },
+    "roberte": {
+      "name": "Roberte la Cuisinière",
+      "relationship_type": "amitie_ancienne",
+      "trust_level": 9,
+      "history": "Meilleures amies depuis l'enfance, elles ont grandi ensemble sur l'île. Roberte était déjà cuisinière quand martine est devenue maire.",
+      "current_dynamic": "Amitié profonde et confiance totale. Roberte est la confidente principale de martine et son conseil le plus précieux.",
+      "shared_memories": [
+        "Enfance passée à explorer les grottes secrètes de l'île",
+        "Première élection de martine - Roberte a organisé le banquet de victoire",
+        "Découverte ensemble d'une partie du trésor ancestral",
+        "Soirées régulières à discuter des affaires de l'île autour d'un thé"
+      ],
+      "tensions": "Très rares, parfois Roberte trouve que martine se surmène trop",
+      "secrets_shared": "Roberte connaît l'emplacement exact du trésor ancestral et l'aide à le protéger. Elle connaît aussi tous les secrets politiques de l'île."
+    },
+    "conseil_aine": {
+      "name": "Le Conseil des Anciens",
+      "relationship_type": "respect_hierarchique",
+      "trust_level": 7,
+      "history": "martine a été élue avec le soutien du conseil, mais maintient une relation parfois complexe avec eux.",
+      "current_dynamic": "Respectueuse mais parfois tendue. Les anciens respectent son leadership mais questionnent parfois ses décisions modernes.",
+      "shared_memories": [
+        "Cérémonie d'investiture en tant que maire",
+        "Grandes décisions concernant l'avenir de l'île",
+        "Transmission des secrets ancestraux"
+      ],
+      "tensions": "Désaccords occasionnels sur l'ouverture de l'île aux étrangers",
+      "secrets_shared": "Les anciens lui ont transmis l'histoire complète de l'île et la responsabilité du trésor"
+    },
+    "habitants_ile": {
+      "name": "Les Habitants de l'Île",
+      "relationship_type": "leadership_bienveillant",
+      "trust_level": 8,
+      "history": "Élue maire il y a 10 ans avec une large majorité, réélue deux fois depuis.",
+      "current_dynamic": "Leadership respecté et apprécié. Les habitants font confiance à ses décisions et viennent la consulter pour leurs problèmes.",
+      "shared_memories": [
+        "Reconstruction après la grande tempête de 1218",
+        "Établissement du marché hebdomadaire",
+        "Création du festival annuel de l'île"
+      ],
+      "tensions": "Quelques mécontents qui trouvent ses décisions trop conservatrices",
+      "secrets_shared": "Les habitants lui font confiance mais ne connaissent pas tous les secrets de l'île"
+    },
+    "etrangers_visiteurs": {
+      "name": "Étrangers et Visiteurs",
+      "relationship_type": "accueil_prudent",
+      "trust_level": 3,
+      "history": "L'île reçoit peu de visiteurs, martine a développé une approche prudente mais hospitalière.",
+      "current_dynamic": "Accueillante mais vigilante. Évalue chaque visiteur pour déterminer ses intentions.",
+      "shared_memories": [
+        "Quelques marchands réguliers qui ont gagné sa confiance",
+        "Incidents avec des visiteurs mal intentionnés"
+      ],
+      "tensions": "Toujours sur ses gardes, protège les secrets de l'île",
+      "secrets_shared": "Aucun secret important révélé aux étrangers"
+    }
+  },
+  "relationship_evolution_notes": {
+    "general_pattern": "martine privilégie les relations à long terme et la stabilité. Elle met du temps à faire confiance mais devient très loyale.",
+    "decision_influences": "Ses décisions sont fortement influencées par l'avis de Roberte et dans une moindre mesure par Claude",
+    "conflict_resolution": "Préfère la diplomatie et le dialogue, évite les confrontations directes",
+    "loyalty_triggers": "La protection de l'île et de ses habitants est sa priorité absolue"
+  }
+}
