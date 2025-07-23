@@ -152,11 +152,15 @@ echoforge/
 graph TD
     A[Message utilisateur] --> B[Chargement mémoire]
     B --> C[Analyse triggers d'entrée]
-    C --> D[Évaluation complexité]
+    D1[Données joueur] --> C
+    D2[Données personnage] --> C
+    C --> D[Changement relation]
     D --> E{Besoin RAG ?}
     E -->|Oui| F[Recherche connaissances]
     E -->|Non| G[Génération directe]
-    F --> H[Génération avec contexte]
+    F --> L[Pertinence contexte]
+    L -->|Oui| H[Génération avec contexte]
+    L -->|Non| F
     G --> I[Analyse triggers de sortie]
     H --> I
     I --> J[Mise à jour mémoire]
